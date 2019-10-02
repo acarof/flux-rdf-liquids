@@ -3,6 +3,7 @@ import numpy as np
 import os
 import gzip
 import scipy.linalg
+import time
 
 
 class Traj(object):
@@ -117,13 +118,14 @@ class Traj(object):
                         vel2 = self.velocities[step][iatom2]
                         vect = (self.positions[step][iatom2] - self.positions[step][iatom])
                         vect = np.array([x - self.box_length * np.rint(x / self.box_length) for x in vect])
-                        dist = np.sqrt(np.sum(np.power(vect, 2)))       
+                        dist = np.sqrt(np.sum(np.power(vect, 2)))
+                        count[pair] += 1
                         try:
                             j_rads[pair][int(dist/binwidth)] += np.dot(deltatild, vect) * np.dot(vel2, vect)   / dist**2  
                             j_thetas[pair][int(dist/binwidth)] += np.dot(deltatild, vect) * np.dot(vel2, vect) / dist**2
                             j_thetas[pair][int(dist/binwidth)] += - np.dot(deltatild, vel2)
                             rdfs[pair][int(dist/binwidth)] += 1.0
-                            count[pair] += 1
+
                         except:
                              pass
                         
