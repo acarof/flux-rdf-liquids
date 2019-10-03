@@ -3,7 +3,9 @@ import numpy as np
 import os
 import gzip
 import scipy.linalg
-import time
+import time, sys
+#import psutil
+#from guppy import hpy
 
 
 class Traj(object):
@@ -14,12 +16,69 @@ class Traj(object):
         self.mass = 28 
         self.is_read = False
 
-    def read_traj_dlpoly(self):
+    #@profile
+    def read_traj_dlpoly(self, freqstep = 1):
+        if self.is_read:
+            print
+            'Traj already read once'
+        else:
+            with open('%s/HISTORY' % self.path) as f:
+                self.labels = {}
+                self.forces = []; self.positions = []; self.velocities = []
+                list_array = [self.positions, self.velocities, self.forces]
+                step = -1; my_step = -1
+                for iline, line in enumerate(f):
+                    if "timestep" in line:
+                        my_step += 1
+                        iatom = -1
+                        if (my_step % freqstep) == 0:
+                            step += 1
+                            for array in list_array:
+                                array.append([])
+                        #if step % 100 == 0:
+                        #    print step, psutil.Process(os.getpid()).memory_info()[0]  /1E9
+                        #    print sys.getsizeof(self) /1E9
+                        #    for array in list_array:
+                        #        print sys.getsizeof(array)  /1E9
+                        #    h = hpy()
+                        #    print h.heap()
+                    if iline == 1:
+                        self.natoms = int(line.split()[2])
+                        print 'Number of atoms: %s' % self.natoms
+                    elif iline == 2:
+                        self.timestep = float(line.split()[5])
+                        print 'Timestep : %s fs' % (self.timestep * 1E3)
+                    elif iline == 3:
+                        self.box_length = float(line.split()[0])
+                        print 'Box length: %s A' % (self.box_length)
+                    if (my_step % freqstep) == 0:
+                        if ( np.abs(iline-2) % (4*self.natoms + 4) ) > 3:
+                            my_line = (iline - 6 - 4*step) % 4
+                            if  my_line == 0:
+                                iatom += 1
+                                self.labels[iatom] = line.split()[0]
+                                for array in [self.forces, self.velocities, self.positions]:
+                                    array[step].append([])
+                            else:
+                                for mod, array in enumerate(list_array):
+                                    if (my_line -1) == mod:
+                                        array[step][iatom] += map(float, line.split())
+                self.steps = len(self.positions)
+                print 'Steps: %s' % self.steps
+                for step in range(self.steps):
+                    if len(self.positions[step]) != self.natoms:
+                        print "error for step", step, len(self.positions[step])
+                self.positions = np.array(self.positions)
+                self.velocities = np.array(self.velocities)
+                self.forces= np.array(self.forces)
+                self.is_read = True
+
+
+    def read_traj_dlpoly_old(self):
         if self.is_read:
             print 'Traj already read once'
         else:
             with open('%s/HISTORY' % self.path) as f:
-                lines = f.readlines()
                 if self.natoms == 0:
                     self.natoms = int(lines[1].split()[2])
                 print 'Number of atoms: %s' % self.natoms
@@ -33,11 +92,19 @@ class Traj(object):
                 step = 0
                 self.labels = {}
                 self.forces = []; self.positions = []; self.velocities = []
+                print "I use the correct version 2"
                 for array in [self.forces, self.velocities, self.positions]:
+                #for array in [self.forces, self.velocities]:
+                    print "new array"
                     for istep in range(self.steps):
+                        if istep % 1000 == 0:
+                            print "istep =", istep
+                            print sys.getsizeof(array)
+                            print psutil.Process(os.getpid()).memory_info()[0] * 8 / 1E9
                         array.append([])
                         for i in range(self.natoms):
                             array[istep].append( [] )
+                print "I create the array"
                 for istep in range(self.steps):
                     for iatom in range(self.natoms):
                         iline = 6 + (4 + self.natoms*4)*istep + 4*iatom
