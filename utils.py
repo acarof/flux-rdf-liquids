@@ -236,3 +236,8 @@ def correlation_matrix(array, length = -1, start = 0):
             covar[i,j] += - mean[i]*mean[j]
     return covar 
     
+def write_flux_function(path, bins, values):
+    with open(path, 'w') as f:
+         f.write('R   F\n')
+         for r, value in zip(bins, values):
+             f.write('%s    %s\n' % (r, value))
