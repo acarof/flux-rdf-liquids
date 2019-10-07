@@ -161,7 +161,53 @@ class Traj(object):
 
             #self.genvp  = scipy.linalg.eigh(self.accacc, b = self.velvel)
             self.genvp  = scipy.linalg.eig(self.accacc, b = self.velvel)
-    
+
+    def count_pair(self, pair):
+        result = 1.0
+        for atom in pair:
+             result = result * self.labels.values().count(atom)
+        return result
+
+    def determine_rdf(self, binwidth, length, pairs = []):
+        if not self.is_read:
+            self.read_traj_dlpoly()
+        start_tot = time.time()
+        nbins = int(self.box_length / (2 * binwidth))
+        print "Use nbins", nbins
+        bins = binwidth * np.array(range(nbins))
+        rdfs = {};  count = {}
+        for pair in pairs:
+            rdfs[pair] = np.zeros(nbins)
+        count = 0
+        for iatom in range(self.natoms):
+            if (iatom % 1000) == 0:
+                start = time.time()
+            for iatom2 in [i for i in range(iatom + 1, self.natoms)]:
+                for step in range(length):
+                    pair = tuple(sorted([self.labels[iatom], self.labels[iatom2]]))
+                    if pair == ('C', 'C'):
+                        count += 1
+                    if pair in pairs:
+                        vect = (self.positions[step][iatom2] - self.positions[step][iatom])
+                        dist = np.sqrt(np.sum(np.power(vect, 2)))
+                        try:
+                            rdfs[pair][int(dist / binwidth)] += 1.0
+                        except:
+                            pass
+            if (iatom % 1000) == 0:
+                print count
+                print "For atom %s finish in:" % iatom, time.time() - start
+        print count
+        print self.count_pair(('C', 'C'))
+        for pair in pairs:
+            for i in range(nbins):
+                if bins[i] != 0:
+                    rdfs[pair][i] = rdfs[pair][i] / ( (bins[i] + binwidth)** 3 - bins[i]**3 )
+            rdfs[pair] = 2 * ( 1 + int(pair[0] == pair[1]) )* rdfs[pair] * self.box_length ** 3 / (  (4.0/3.0) * np.pi  * self.count_pair(pair) * length)
+        self.bins = bins
+        self.rdfs = rdfs
+        print "Total time is :", time.time() - start_tot
+
     def determine_flux(self, freq0, binwidth, length, pairs = []):
         if not self.is_read:
             self.read_traj_dlpoly()
