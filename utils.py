@@ -188,17 +188,16 @@ class Traj(object):
                            rdfs[pair][int(dist[step]/binwidth)] += 1
             if (iatom % 1000) == 0:
                 print "For atom %s finish in:" % iatom, time.time() - start
-        vol = np.zeros(nbins + 1)
+        vol = np.zeros(nbins)
         for i, rr in enumerate(bins):
-            vol[i+1] = ((4.0/3.0) * np.pi ) * rr**3
+            vol[i] = ((4.0/3.0) * np.pi ) * rr**3
             if rr > self.box_length / 2:
                 x = self.box_length / (2 * rr)
-                vol[i+1] = vol[i+1] * ( - 2 + 4.5*x  - 1.5 * x**3)
+                vol[i] = vol[i] * ( - 2 + 4.5*x  - 1.5 * x**3)
         for pair in pairs:
-            for i in range(nbins):
-                if bins[i] != 0:
-                    rdfs[pair][i] = rdfs[pair][i] / (vol[i+1] - vol[i])
-            rdfs[pair] =  ( 1 + int(pair[0] == pair[1]) )* rdfs[pair] * self.box_length ** 3 / (   self.count_pair(pair) * self.steps)
+            for i in range(1, nbins):
+                rdfs[pair][i] = rdfs[pair][i] / (vol[i] - vol[i-1])
+            rdfs[pair] =  ( 1 + int(pair[0] == pair[1]) )* rdfs[pair] * self.box_length ** 3 / (self.count_pair(pair) * self.steps)
         self.bins = bins
         self.rdfs = rdfs
         print "Total time is :", time.time() - start_tot
