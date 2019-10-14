@@ -202,43 +202,81 @@ class Traj(object):
         self.rdfs = rdfs
         print "Total time is :", time.time() - start_tot
 
-    def determine_flux(self, freq0, binwidth, length, pairs = []):
+    def calculate_propagator(self, binwidth, freq_tau = 1, length = -1, wrap = False ):
         if not self.is_read:
             self.read_traj_dlpoly()
-        nbins = int(self.box_length/(2*binwidth))
-        print "Use nbins", nbins
+        start_tot = time.time()
+        if length < 0 or wrap:
+            length = self.box_length
+        nbins = int(length /  binwidth )
+        print "Use nbins for RDF", nbins
         bins = binwidth * np.array(range(nbins))
-        j_rads = {}; j_thetas = {}; rdfs = {}; count = {}
+        taus = range(0, self.steps, freq_tau)
+        prop = np.zeros( (nbins, len(taus)  ) )
+        max_ = 0
+        count = 0
+        for itau, tau in enumerate(taus):
+            for istep in range(self.steps - tau):
+                vect = self.positions[istep + tau, :, : ] - self.positions[istep, :, :]
+                if wrap:
+                    vect += - self.box_length * np.rint(vect / self.box_length)
+                dist = np.sqrt(np.sum(np.power(vect, 2), 1))
+
+                max_ = max(max(dist), max_)
+                for iatom in range(self.natoms):
+                    count += 1
+                    if int(dist[iatom]/binwidth) < nbins:
+                        prop[int(dist[iatom]/binwidth), itau] += 1
+        if wrap:
+            self.bins_prop_wrap = bins
+            self.taus_prop_wrap = taus
+            self.prop_wrap = prop
+        else:
+            self.bins_prop = bins
+            self.taus_prop = taus
+            self.prop = prop
+        print "Max distance is", max_
+        print count
+        print "Total time is :", time.time() - start_tot
+
+    def determine_flux(self, freq0, length,  binwidth, pairs = []):
+        if not self.is_read:
+            self.read_traj_dlpoly()
+        start_tot = time.time()
+        nbins = int(np.sqrt(2) *self.box_length / (2 * binwidth))
+        print "Use nbins for RDF", nbins
+        bins = binwidth * np.array(range(nbins))
+        j_rads = {}; j_thetas = {}; rdfs = {}
         for pair in pairs:
             j_rads[pair] = np.zeros(nbins) 
             j_thetas[pair] = np.zeros(nbins) 
             rdfs[pair] = np.zeros(nbins)
-            count[pair] = 0
         for iatom in range(self.natoms):
-            deltatild = np.zeros(3) 
-            deltatild  = (self.positions[length][iatom] - self.positions[0][iatom])
-            deltatild += - self.box_length * np.floor( 2*deltatild/self.box_length) / 2
-            for step in range(length):
-                for iatom2 in  [i for i in range(self.natoms) if i !=iatom]:
-                    pair = tuple(sorted([self.labels[iatom], self.labels[iatom2]]))
-                    if pair in pairs:
-                        vel2 = self.velocities[step][iatom2]
-                        vect = (self.positions[step][iatom2] - self.positions[step][iatom])
-                        vect = np.array([x - self.box_length * np.rint(x / self.box_length) for x in vect])
-                        dist = np.sqrt(np.sum(np.power(vect, 2)))
-                        count[pair] += 1
-                        try:
-                            j_rads[pair][int(dist/binwidth)] += np.dot(deltatild, vect) * np.dot(vel2, vect)   / dist**2  
-                            j_thetas[pair][int(dist/binwidth)] += np.dot(deltatild, vect) * np.dot(vel2, vect) / dist**2
-                            j_thetas[pair][int(dist/binwidth)] += - np.dot(deltatild, vel2)
-                            rdfs[pair][int(dist/binwidth)] += 1.0
-
-                        except:
-                             pass
-                        
-                    #else:
-                    #    print 'Pair is not in pairs:', pair
-                deltatild += - self.velocities[step][iatom]
+            deltatild = np.roll(self.positions[:,iatom,:], length, axis=0) - self.positions[:,iatom,:]
+            deltatild += - self.box_length * np.rint(deltatild / self.box_length)
+            print deltatild
+            for iatom2 in [i for i in range(iatom + 1, self.natoms)]:
+                pair = tuple(sorted([self.labels[iatom], self.labels[iatom2]]))
+                if pair in pairs:
+                    vel2 = self.velocities[:,iatom2, :]
+                    vect = (self.positions[:,iatom2, :] - self.positions[:, iatom, :])
+                    vect = vect - self.box_length * np.rint(vect / self.box_length)
+                    dist = np.sqrt(np.sum(np.power(vect, 2), 1))
+                    longitudinal = np.multiply(vect, deltatild).sum(-1) \
+                                       * np.multiply(vect, vel2).sum(-1)
+                    for step in range(len(dist)):
+                        if int(dist[step] / binwidth) < int((np.sqrt(2) * self.box_length / 2) / binwidth):
+                            rdfs[pair][int(dist[step] / binwidth)] += 1
+                            j_rads[pair][int(dist[step] / binwidth) ] += longitudinal[step]
+                    stop
+ #                   #try:
+ #
+ #                       j_thetas[pair][int(dist/binwidth)] += np.dot(deltatild, vect) * np.dot(vel2, vect) / dist**2
+ #                       j_thetas[pair][int(dist/binwidth)] += - np.dot(deltatild, vel2)
+ #                       rdfs[pair][int(dist/binwidth)] += 1.0
+ #                   except:
+ #                        pass
+ #               deltatild += - self.velocities[step][iatom]
         for pair in pairs:
             for i in range(nbins):
                 if bins[i] != 0:
