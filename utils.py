@@ -22,6 +22,7 @@ class Traj(object):
             print
             'Traj already read once'
         else:
+            print "Start to read trajectory"
             with open('%s/HISTORY' % self.path) as f:
                 self.labels = {}
                 self.forces = []; self.positions = []; self.velocities = []
@@ -72,6 +73,7 @@ class Traj(object):
                 self.velocities = np.array(self.velocities)
                 self.forces= np.array(self.forces)
                 self.is_read = True
+                print "Trajectory is read"
 
 
     def read_traj_dlpoly_old(self):
