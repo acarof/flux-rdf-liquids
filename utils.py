@@ -242,6 +242,11 @@ class Traj(object):
         print "Total time is :", time.time() - start_tot
 
     def determine_flux(self, freq0, length,  binwidth, pairs = []):
+        # sum over length
+        # frame lab/part
+        # check it works
+        # add frequency
+        # speed-up ?
         if not self.is_read:
             self.read_traj_dlpoly()
         start_tot = time.time()
@@ -256,7 +261,6 @@ class Traj(object):
         for iatom in range(self.natoms):
             deltatild = np.roll(self.positions[:,iatom,:], length, axis=0) - self.positions[:,iatom,:]
             deltatild += - self.box_length * np.rint(deltatild / self.box_length)
-            print deltatild
             for iatom2 in [i for i in range(iatom + 1, self.natoms)]:
                 pair = tuple(sorted([self.labels[iatom], self.labels[iatom2]]))
                 if pair in pairs:
@@ -266,31 +270,30 @@ class Traj(object):
                     dist = np.sqrt(np.sum(np.power(vect, 2), 1))
                     longitudinal = np.multiply(vect, deltatild).sum(-1) \
                                        * np.multiply(vect, vel2).sum(-1)
-                    for step in range(len(dist)):
+                    transversal = longitudinal
+                    transversal += - np.multiply(deltatild, vel2).sum(-1)
+                    for step in range(len(dist) - length):
                         if int(dist[step] / binwidth) < int((np.sqrt(2) * self.box_length / 2) / binwidth):
                             rdfs[pair][int(dist[step] / binwidth)] += 1
-                            j_rads[pair][int(dist[step] / binwidth) ] += longitudinal[step]
-                    stop
- #                   #try:
- #
- #                       j_thetas[pair][int(dist/binwidth)] += np.dot(deltatild, vect) * np.dot(vel2, vect) / dist**2
- #                       j_thetas[pair][int(dist/binwidth)] += - np.dot(deltatild, vel2)
- #                       rdfs[pair][int(dist/binwidth)] += 1.0
- #                   except:
- #                        pass
- #               deltatild += - self.velocities[step][iatom]
+                            j_rads[pair][int(dist[step] / binwidth) ] += longitudinal[step] / dist[step]**4
+                            j_thetas[pair][int(dist[step] / binwidth) ] += transversal[step] / dist[step]**4
+        vol = np.zeros(nbins)
+        for i, rr in enumerate(bins):
+            vol[i] = ((4.0/3.0) * np.pi ) * rr**3
+            if rr > self.box_length / 2:
+                x = self.box_length / (2 * rr)
+                vol[i] = vol[i] * ( - 2 + 4.5*x  - 1.5 * x**3)
         for pair in pairs:
-            for i in range(nbins):
-                if bins[i] != 0:
-                    j_rads[pair][i] = j_rads[pair][i] /rdfs[pair][i]
-                    j_thetas[pair][i] = j_thetas[pair][i] / rdfs[pair][i]
-                    rdfs[pair][i] = rdfs[pair][i]  / bins[i]**2
-                    #j_rad[i] = j_rad[i] / bins[i]**2
-            rdfs[pair] = rdfs[pair]*self.box_length**3 / (4*np.pi*binwidth*count[pair])
+            for i in range(1, nbins):
+              #  j_rads[pair][i] = j_rads[pair][i]
+              #  j_thetas[pair][i] = j_thetas[pair][i]
+                rdfs[pair][i] = rdfs[pair][i] / (vol[i] - vol[i-1])
+            rdfs[pair] =  ( 1 + int(pair[0] == pair[1]) )* rdfs[pair] * self.box_length ** 3 / (self.count_pair(pair) * self.steps)
         self.bins = bins
         self.rdfs = rdfs
         self.j_rads = j_rads
         self.j_thetas = j_thetas
+        print "Total time is :", time.time() - start_tot
 
     
 def correlation_matrix(array, length = -1, start = 0):
