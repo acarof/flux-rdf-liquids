@@ -80,8 +80,12 @@ class Traj(object):
                 self.forces= np.array(self.forces)
                 self.is_read = True
                 self.times = np.arange(self.steps) * printstep
+                self.shift_com()
                 print "Trajectory is read"
 
+    def shift_com(self):
+        com_vel = np.mean(self.velocities, axis = 0)
+        self.vel_shifted = self.velocities - com_vel
 
     def read_traj_dlpoly_old(self):
         if self.is_read:
@@ -130,15 +134,15 @@ class Traj(object):
         if length < 0:
             length = self.steps
         Z_ws = {}
-        for atom in set(self.labels):
+        for atom in set(self.labels.values()):
             Z_ws[atom] = np.zeros(length + 1)
         for i in range(3):
             for iatom in range(self.natoms):
-                xaxis, fft = calculate_fft(self.times[:length], length.velocities[:length, iatom, i])
+                xaxis, fft = calculate_fft(self.times[:length], self.vel_shifted[:length, iatom, i])
                 Z_ws[self.labels[iatom]] += np.abs(fft)**2
         self.Z_ws = {}
-        for atom  in set(self.labels):
-            self.Z_ws[atom] = Z_ws[atom]  * length / ( np.sum(Z_ws[atom] ) * 3 * self.labels.values().count(atom))
+        for atom in set(self.labels.values()):
+            self.Z_ws[atom] = (xaxis, Z_ws[atom]  * length / ( np.sum(Z_ws[atom] ) * 3 * self.labels.values().count(atom)))
 
     def info_matrix(self, matrix):
             rank =  np.linalg.matrix_rank(matrix)
