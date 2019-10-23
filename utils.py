@@ -271,7 +271,7 @@ class Traj(object):
                     dist = np.sqrt(np.sum(np.power(vect, 2), 1))
                     longitudinal = np.multiply(vect, deltatild).sum(-1) \
                                        * np.multiply(vect, vel2).sum(-1)
-                    transversal = longitudinal
+                    transversal = np.copy(longitudinal)
                     transversal += - np.multiply(deltatild, vel2).sum(-1)
                     for step in range(nsteps_mean):
                         if int(dist[step] / binwidth) < int((np.sqrt(2) * self.box_length / 2) / binwidth):
