@@ -7,6 +7,12 @@ import time, sys
 #import psutil
 #from guppy import hpy
 
+def calculate_fft(time, serie):
+    serie = np.append(serie, np.zeros(serie.shape))
+    fft = np.fft.rfft(serie)
+    length = len(fft)
+    xaxis = np.arange(length) * (np.pi / time[-1])
+    return xaxis, fft
 
 class Traj(object):
     
@@ -17,7 +23,7 @@ class Traj(object):
         self.is_read = False
 
     #@profile
-    def read_traj_dlpoly(self, freqstep = 1):
+    def read_traj_dlpoly(self, freqstep = 1, printstep = 0):
         if self.is_read:
             print
             'Traj already read once'
@@ -73,6 +79,7 @@ class Traj(object):
                 self.velocities = np.array(self.velocities)
                 self.forces= np.array(self.forces)
                 self.is_read = True
+                self.times = np.arange(self.steps) * printstep
                 print "Trajectory is read"
 
 
@@ -119,7 +126,19 @@ class Traj(object):
                 self.forces= np.array(self.forces)
                 self.is_read = True
 
-
+    def calculate_spectral_density(self, length = -1, ):
+        if length < 0:
+            length = self.steps
+        Z_ws = {}
+        for atom in set(self.labels):
+            Z_ws[atom] = np.zeros(length + 1)
+        for i in range(3):
+            for iatom in range(self.natoms):
+                xaxis, fft = calculate_fft(self.times[:length], length.velocities[:length, iatom, i])
+                Z_ws[self.labels[iatom]] += np.abs(fft)**2
+        self.Z_ws = {}
+        for atom  in set(self.labels):
+            self.Z_ws[atom] = Z_ws[atom]  * length / ( np.sum(Z_ws[atom] ) * 3 * self.labels.values().count(atom))
 
     def info_matrix(self, matrix):
             rank =  np.linalg.matrix_rank(matrix)
