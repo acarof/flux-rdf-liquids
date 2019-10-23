@@ -258,6 +258,7 @@ class Traj(object):
             j_rads[pair] = np.zeros(nbins) 
             j_thetas[pair] = np.zeros(nbins) 
             rdfs[pair] = np.zeros(nbins)
+        nsteps_mean = self.steps - length
         for iatom in range(self.natoms):
             deltatild = np.roll(self.positions[:,iatom,:], length, axis=0) - self.positions[:,iatom,:]
             deltatild += - self.box_length * np.rint(deltatild / self.box_length)
@@ -272,7 +273,7 @@ class Traj(object):
                                        * np.multiply(vect, vel2).sum(-1)
                     transversal = longitudinal
                     transversal += - np.multiply(deltatild, vel2).sum(-1)
-                    for step in range(len(dist) - length):
+                    for step in range(nsteps_mean):
                         if int(dist[step] / binwidth) < int((np.sqrt(2) * self.box_length / 2) / binwidth):
                             rdfs[pair][int(dist[step] / binwidth)] += 1
                             j_rads[pair][int(dist[step] / binwidth) ] += longitudinal[step] / dist[step]**4
@@ -288,7 +289,9 @@ class Traj(object):
               #  j_rads[pair][i] = j_rads[pair][i]
               #  j_thetas[pair][i] = j_thetas[pair][i]
                 rdfs[pair][i] = rdfs[pair][i] / (vol[i] - vol[i-1])
-            rdfs[pair] =  ( 1 + int(pair[0] == pair[1]) )* rdfs[pair] * self.box_length ** 3 / (self.count_pair(pair) * self.steps)
+            rdfs[pair] =  ( 1 + int(pair[0] == pair[1]) )* rdfs[pair] * self.box_length ** 3 / (self.count_pair(pair) * nsteps_mean)
+            j_rads[pair] = j_rads[pair] / nsteps_mean
+            j_thetas[pair] = j_thetas[pair] / nsteps_mean
         self.bins = bins
         self.rdfs = rdfs
         self.j_rads = j_rads
