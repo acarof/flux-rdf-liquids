@@ -100,49 +100,6 @@ class Traj(object):
         com_vel = np.mean(self.velocities, axis = 0)
         self.vel_shifted = self.velocities - com_vel
 
-    def read_traj_dlpoly_old(self):
-        if self.is_read:
-            print 'Traj already read once'
-        else:
-            with open('%s/HISTORY' % self.path) as f:
-                if self.natoms == 0:
-                    self.natoms = int(lines[1].split()[2])
-                print 'Number of atoms: %s' % self.natoms
-                self.steps = int( (len(lines) - 2) / float(self.natoms*4 + 4) )
-                print 'Steps: %s' % self.steps
-                self.box_length = float(lines[3].split()[0])
-                print 'Box length: %s A' % (self.box_length)
-                self.timestep = float(lines[2].split()[5])
-                print 'Timestep : %s fs' % (self.timestep*1E3)
-
-                self.labels = {}
-                self.forces = []; self.positions = []; self.velocities = []
-                for array in [self.forces, self.velocities, self.positions]:
-                    print "new array"
-                    for istep in range(self.steps):
-                        if istep % 1000 == 0:
-                            print "istep =", istep
-                            print sys.getsizeof(array)
-                            print psutil.Process(os.getpid()).memory_info()[0] * 8 / 1E9
-                        array.append([])
-                        for i in range(self.natoms):
-                            array[istep].append( [] )
-                for istep in range(self.steps):
-                    for iatom in range(self.natoms):
-                        iline = 6 + (4 + self.natoms*4)*istep + 4*iatom
-                        if self.labels.get(iatom) is None:
-                            self.labels[iatom] = lines[iline].split()[0]
-                        line = map(float, lines[iline+1].split())
-                        self.positions[istep][iatom] += line
-                        line = map(float, lines[iline+1].split())
-                        self.velocities[istep][iatom] += line
-                        line = map(float, lines[iline+1].split())
-                        self.forces[istep][iatom] += line
-                self.positions = np.array(self.positions)
-                self.velocities = np.array(self.velocities)
-                self.forces= np.array(self.forces)
-                self.is_read = True
-
     def calculate_spectral_density(self, length = -1, ):
         if length < 0:
             length = self.steps
