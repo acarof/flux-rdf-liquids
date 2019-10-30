@@ -81,7 +81,20 @@ class Traj(object):
                 self.is_read = True
                 self.times = np.arange(self.steps) * printstep
                 self.shift_com()
+                self.unwrap()
                 print "Trajectory is read"
+
+    def unwrap(self):
+        #print 0, self.positions[0, 410, :]
+        for step in range(1,self.steps):
+            #print step, self.positions[step, 410, :]
+            vect = self.positions[step, :, :] - self.positions[step -1, : ,: ]
+            vect = np.rint(vect/self.box_length)
+            self.positions[step, :, :] -= np.multiply(vect,  np.array([[self.box_length,]*3,]*self.natoms))
+            print step, self.positions[step, 410, :], "after"
+            if np.isnan(self.positions[step, :, :]).any():
+                print "Problem unwrap"
+                stop
 
     def shift_com(self):
         com_vel = np.mean(self.velocities, axis = 0)
@@ -241,17 +254,40 @@ class Traj(object):
         max_ = 0
         count = 0
         for itau, tau in enumerate(taus):
+            print tau, self.steps, len(range(self.steps - tau))
+            l_ = []
             for istep in range(self.steps - tau):
+                if (istep+tau, istep) in l_:
+                    print istep+tau, istep
+                    stop
+                else:
+                    l_.append((istep+tau, istep))
                 vect = self.positions[istep + tau, :, : ] - self.positions[istep, :, :]
+                #if istep == 0:
+                #    print vect[0,:]
                 if wrap:
                     vect += - self.box_length * np.rint(vect / self.box_length)
                 dist = np.sqrt(np.sum(np.power(vect, 2), 1))
+                for id, d in enumerate(dist):
+                    if np.isnan(d):
+                        print id
+                        print self.positions[istep+tau, id, :]
+                        print self.positions[istep, id, :]
+                if np.isnan(dist).any():
+                    print "problem in dist"
+                    stop
 
                 max_ = max(max(dist), max_)
+                #print istep, tau, max(dist), np.argmax(dist)
+                #print istep+tau, self.positions[istep+tau, np.argmax(dist), :]
+                #print istep, self.positions[istep , np.argmax(dist), :]
+                #print vect[np.argmax(dist), :]
+                #print
                 for iatom in range(self.natoms):
                     count += 1
                     if int(dist[iatom]/binwidth) < nbins:
                         prop[int(dist[iatom]/binwidth), itau] += 1
+            print "max distance for itau %s is %s" % (itau, max_)
         if wrap:
             self.bins_prop_wrap = bins
             self.taus_prop_wrap = taus
