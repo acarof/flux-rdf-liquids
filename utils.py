@@ -86,12 +86,13 @@ class Traj(object):
 
     def unwrap(self):
         #print 0, self.positions[0, 410, :]
+        self.positions_wrap = np.copy(self.positions)
         for step in range(1,self.steps):
             #print step, self.positions[step, 410, :]
             vect = self.positions[step, :, :] - self.positions[step -1, : ,: ]
             vect = np.rint(vect/self.box_length)
             self.positions[step, :, :] -= np.multiply(vect,  np.array([[self.box_length,]*3,]*self.natoms))
-            print step, self.positions[step, 410, :], "after"
+            #print step, self.positions[step, 410, :], "after"
             if np.isnan(self.positions[step, :, :]).any():
                 print "Problem unwrap"
                 stop
@@ -159,7 +160,7 @@ class Traj(object):
              result = result * self.labels.values().count(atom)
         return result
 
-    def determine_rdf(self, binwidth,  pairs = []):
+    def determine_rdf(self, binwidth,  pairs = [], wrap = False):
         if not self.is_read:
             self.read_traj_dlpoly()
         start_tot = time.time()
@@ -176,6 +177,8 @@ class Traj(object):
                 pair = tuple(sorted([self.labels[iatom], self.labels[iatom2]]))
                 if pair in pairs:
                     vect = (self.positions[:,iatom2, :] - self.positions[:, iatom, :])
+                    if wrap:
+                        vect = (self.positions_wrap[:,iatom2, :] - self.positions_wrap[:, iatom, :])
                     vect = vect - self.box_length * np.rint(vect / self.box_length)
                     dist = np.sqrt(np.sum(np.power(vect, 2), 1))
                     for step in range(len(dist)):
