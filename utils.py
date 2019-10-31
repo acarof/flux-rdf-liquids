@@ -160,6 +160,26 @@ class Traj(object):
              result = result * self.labels.values().count(atom)
         return result
 
+    def determine_msd(self, length = -1, atoms = ()):
+        if atoms == ():
+            atoms = set(self.labels[0])
+        if length < 0:
+            length = int(self.steps / 2)
+        msds = {}
+        for atom in atoms:
+            msds[atom] = np.zeros(length)
+        for tau in range(length):
+            for istep in range(self.steps - tau):
+                for iatom in range(self.natoms):
+                    vect = self.positions[istep + tau, :, :] - self.positions[istep, :, :]
+                    msds[self.labels[iatom]] += np.sum(np.power(vect, 2  ))
+            for atom in atoms:
+                msds[atoms] = msds[atom] / (self.natoms * (selfs.steps - tau))
+        self.msds = msds
+
+
+
+
     def determine_rdf(self, binwidth,  pairs = [], wrap = False):
         if not self.is_read:
             self.read_traj_dlpoly()
