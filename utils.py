@@ -54,7 +54,7 @@ class Traj(object):
                         print 'Number of atoms: %s' % self.natoms
                     elif iline == 2:
                         self.timestep = float(line.split()[5])
-                        print 'Timestep : %s fs' % (self.timestep * 1E3)
+                        print 'Timestep : %s ps' % (self.timestep)
                     elif iline == 3:
                         self.box_length = float(line.split()[0])
                         print 'Box length: %s A' % (self.box_length)
@@ -162,23 +162,22 @@ class Traj(object):
 
     def determine_msd(self, length = -1, atoms = ()):
         if atoms == ():
-            atoms = set(self.labels[0])
+            atoms = set(self.labels.values())
         if length < 0:
             length = int(self.steps / 2)
         msds = {}
+        msds['time'] = np.arange(length)*self.timestep
         for atom in atoms:
             msds[atom] = np.zeros(length)
         for tau in range(length):
+            vect = np.roll(self.positions, -tau, axis=0) - self.positions
+            dist = np.sum(np.power(vect, 2), 2)
             for istep in range(self.steps - tau):
                 for iatom in range(self.natoms):
-                    vect = self.positions[istep + tau, :, :] - self.positions[istep, :, :]
-                    msds[self.labels[iatom]] += np.sum(np.power(vect, 2  ))
+                    msds[self.labels[iatom]][tau] += dist[istep, iatom]
             for atom in atoms:
-                msds[atoms] = msds[atom] / (self.natoms * (selfs.steps - tau))
+                msds[atom][tau] = msds[atom][tau] / (self.natoms * (self.steps - tau))
         self.msds = msds
-
-
-
 
     def determine_rdf(self, binwidth,  pairs = [], wrap = False):
         if not self.is_read:
@@ -299,7 +298,7 @@ class Traj(object):
             rdfs[pair] = np.zeros(nbins)
         nsteps_mean = self.steps - length
         for iatom in range(self.natoms):
-            deltatild = np.roll(self.positions[:,iatom,:], length, axis=0) - self.positions[:,iatom,:]
+            deltatild = np.roll(self.positions[:,iatom,:], -length, axis=0) - self.positions[:,iatom,:]
             deltatild += - self.box_length * np.rint(deltatild / self.box_length)
             for iatom2 in [i for i in range(iatom + 1, self.natoms)]:
                 pair = tuple(sorted([self.labels[iatom], self.labels[iatom2]]))
