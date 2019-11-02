@@ -309,13 +309,12 @@ class Traj(object):
                     dist = np.sqrt(np.sum(np.power(vect, 2), 1))
                     longitudinal = np.multiply(vect, deltatild).sum(-1) \
                                        * np.multiply(vect, vel2).sum(-1)
-                    transversal = np.copy(longitudinal)
-                    transversal += - np.multiply(deltatild, vel2).sum(-1)
+                    transversal = np.multiply(deltatild, vel2).sum(-1)
                     for step in range(nsteps_mean):
                         if int(dist[step] / binwidth) < int((np.sqrt(2) * self.box_length / 2) / binwidth):
                             rdfs[pair][int(dist[step] / binwidth)] += 1
                             j_rads[pair][int(dist[step] / binwidth) ] += longitudinal[step] / dist[step]**4
-                            j_thetas[pair][int(dist[step] / binwidth) ] += transversal[step] / dist[step]**4
+                            j_thetas[pair][int(dist[step] / binwidth) ] += longitudinal[step] / dist[step]**4 - transversal[step]/dist[step]**2
         vol = np.zeros(nbins)
         for i, rr in enumerate(bins):
             vol[i] = ((4.0/3.0) * np.pi ) * rr**3
