@@ -226,47 +226,31 @@ class Traj(object):
         if length < 0 or wrap:
             length = self.box_length
         nbins = int(length /  binwidth )
-        print "Use nbins for RDF", nbins
+        print "Use nbins for prop", nbins
         bins = binwidth * np.array(range(nbins))
         taus = range(0, self.steps, freq_tau)
         prop = np.zeros( (nbins, len(taus)  ) )
         max_ = 0
-        count = 0
         for itau, tau in enumerate(taus):
-            print tau, self.steps, len(range(self.steps - tau))
+            count = 0
+            #print tau, self.steps, len(range(self.steps - tau))
             l_ = []
             for istep in range(self.steps - tau):
-                if (istep+tau, istep) in l_:
-                    print istep+tau, istep
-                    stop
-                else:
-                    l_.append((istep+tau, istep))
+                l_.append((istep+tau, istep))
                 vect = self.positions[istep + tau, :, : ] - self.positions[istep, :, :]
-                #if istep == 0:
-                #    print vect[0,:]
                 if wrap:
                     vect += - self.box_length * np.rint(vect / self.box_length)
                 dist = np.sqrt(np.sum(np.power(vect, 2), 1))
-                for id, d in enumerate(dist):
-                    if np.isnan(d):
-                        print id
-                        print self.positions[istep+tau, id, :]
-                        print self.positions[istep, id, :]
                 if np.isnan(dist).any():
                     print "problem in dist"
                     stop
-
                 max_ = max(max(dist), max_)
-                #print istep, tau, max(dist), np.argmax(dist)
-                #print istep+tau, self.positions[istep+tau, np.argmax(dist), :]
-                #print istep, self.positions[istep , np.argmax(dist), :]
-                #print vect[np.argmax(dist), :]
-                #print
                 for iatom in range(self.natoms):
                     count += 1
                     if int(dist[iatom]/binwidth) < nbins:
                         prop[int(dist[iatom]/binwidth), itau] += 1
-            print "max distance for itau %s is %s" % (itau, max_)
+            prop[:,itau] = prop[:, itau] / ((self.steps - tau))
+            prop[:,itau] = prop[:, itau] / (binwidth*np.sum(prop[:,itau]))
         if wrap:
             self.bins_prop_wrap = bins
             self.taus_prop_wrap = taus
@@ -276,7 +260,7 @@ class Traj(object):
             self.taus_prop = taus
             self.prop = prop
         print "Max distance is", max_
-        print count
+        #print count
         print "Total time is :", time.time() - start_tot
 
     def determine_flux(self, freq0, length,  binwidth, pairs = []):
