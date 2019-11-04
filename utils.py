@@ -219,6 +219,39 @@ class Traj(object):
         self.rdfs = rdfs
         print "Total time is :", time.time() - start_tot
 
+    def calculate_fpt(self, binwidth, freq_tau = 1, length = -1, target_size = 1):
+        if not self.is_read:
+            self.read_traj_dlpoly()
+        start_tot = time.time()
+        if length < 0:
+            length = self.box_length
+        nbins = int(length /  binwidth )
+        print "Use nbins for prop", nbins
+        bins = binwidth * np.array(range(nbins))
+        taus = range(0, self.steps, freq_tau)
+        prop = np.zeros( (nbins, len(taus)  ) )
+        list_pos = []
+        for istep in range(self.steps ):
+            for itau, tau in enumerate(taus):
+                vect = self.positions[istep + tau, :, : ] - self.positions[istep, :, :]
+                vect += - self.box_length * np.rint(vect / self.box_length)
+                chi = 1
+                for previous_pos in list_pos:
+                    if (np.sum( (vect - previous_pos)**2 )) < target_size:
+                        chi = 0
+                previous_pos.append(vect)
+                dist = np.sqrt(np.sum(np.power(vect, 2), 1))
+                for iatom in range(self.natoms):
+                    if int(dist[iatom]/binwidth) < nbins:
+                        prop[int(dist[iatom]/binwidth), itau] += chi
+            prop[:,itau] = prop[:, itau] / ((self.steps - tau))
+            prop[:,itau] = prop[:, itau] / (binwidth*np.sum(prop[:,itau]))
+        self.bins_fpt = bins
+        self.taus_fpt = taus
+        self.fpt = prop
+        print "Total time is :", time.time() - start_tot
+
+
     def calculate_propagator(self, binwidth, freq_tau = 1, length = -1, wrap = False ):
         if not self.is_read:
             self.read_traj_dlpoly()
