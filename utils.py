@@ -360,12 +360,20 @@ class CO2(Traj):
     def __init__(self, path):
         super(CO2, self). __init__(path=path)
 
+    def build_molecules(self):
+        self.nmols = self.natoms / 3
+        self.mol_indexes = range(self.nmols)
+        for imol in range(self.nmols):
+            self.mol_indexes[imol] = [imol*3, imol*3+1, imol*3+2]
+
     def determine_map(self, binwidth ):
         nbins = int(self.box_length/(2*binwidth))
-        self.bins_map = np.meshgrid([binwidth*np.array(range(nbins)),]*2)
-        maps = {}
-        for mol in self.kind_mol:
-            maps[mol] = np.zeros((nbins,nbins))
+        self.bins_map = np.meshgrid(binwidth*np.array(range(nbins)),binwidth*np.array(range(nbins)))
+        self.maps = {}
+        for mol in ['CO2']:
+            self.maps[mol] = {}
+            for atom in set(self.labels.values()):
+                self.maps[mol][atom] = np.zeros((nbins,nbins))
         for imol in range(self.nmols):
             c, o1, o2 = self.mol_indexes[imol]
             u = self.positions[:,o2,:] - self.positions[:,o1,:]
@@ -379,10 +387,14 @@ class CO2(Traj):
             for iatom in range(self.natoms):
                 pos = self.positions[:,iatom,:] - mean
                 pos += - self.box_length*np.rint(pos/self.box_length)
-                rhos = np.rint( np.linalg.norm( np.cross(u, pos) )/binwidth ).astype(int)
-                zetas = np.rint(np.dot(u,pos)/binwidth).astype(int)
+                rhos = np.zeros(self.steps)
+                for step in range(self.steps):
+                    rhos[step] = np.rint( np.linalg.norm( np.cross(u[step], pos[step]) )/binwidth )
+                rhos = rhos.astype(int)
+                zetas = np.rint(np.multiply(u,pos).sum(1) /binwidth).astype(int)
                 for rho, zeta in zip(rhos, zetas):
-                    self.maps[mol][self.labels[iatom]][rho, zeta] += 1
+                    if (rho < nbins) and (0 < zeta + int(np.rint(nbins / 2)) < nbins):
+                        self.maps[mol][self.labels[iatom]][rho, zeta+int(np.rint(nbins/2)) ] += 1
 
 
 
