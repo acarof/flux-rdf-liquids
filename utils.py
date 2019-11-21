@@ -356,7 +356,36 @@ class Traj(object):
         self.j_thetas = j_thetas
         print "Total time is :", time.time() - start_tot
 
-    
+class CO2(Traj):
+    def __init__(self, path):
+        super(CO2, self). __init__(path=path)
+
+    def determine_map(self, binwidth ):
+        nbins = int(self.box_length/(2*binwidth))
+        self.bins_map = np.meshgrid([binwidth*np.array(range(nbins)),]*2)
+        maps = {}
+        for mol in self.kind_mol:
+            maps[mol] = np.zeros((nbins,nbins))
+        for imol in range(self.nmols):
+            c, o1, o2 = self.mol_indexes[imol]
+            u = self.positions[:,o2,:] - self.positions[:,o1,:]
+            u += - self.box_length*np.rint(u/self.box_length)
+            u = u / np.linalg.norm(u)
+            vect1 = self.positions[:,o1,:]
+            vect1 += - self.box_length*np.rint(vect1/self.box_length)
+            vect2 = self.positions[:,o2,:]
+            vect2 += - self.box_length*np.rint(vect1/self.box_length)
+            mean = (vect1 + vect2)/2
+            for iatom in range(self.natoms):
+                pos = self.positions[:,iatom,:] - mean
+                pos += - self.box_length*np.rint(pos/self.box_length)
+                rhos = np.rint( np.linalg.norm( np.cross(u, pos) )/binwidth ).astype(int)
+                zetas = np.rint(np.dot(u,pos)/binwidth).astype(int)
+                for rho, zeta in zip(rhos, zetas):
+                    self.maps[mol][self.labels[iatom]][rho, zeta] += 1
+
+
+
 def correlation_matrix(array, length = -1, start = 0):
     new = array.reshape( array.shape[0], array.shape[1]*array.shape[2] )
     covar = np.zeros( (array.shape[1]*array.shape[2], array.shape[1]*array.shape[2]))
