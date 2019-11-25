@@ -21,6 +21,8 @@ class Traj(object):
         self.natoms = 0
         self.mass = 28 
         self.is_read = False
+        self.times = {}
+        self.bins = {}
 
     #@profile
     def read_traj_dlpoly(self, freqstep = 1, printstep = 0):
@@ -55,10 +57,14 @@ class Traj(object):
                     elif iline == 2:
                         self.timestep = float(line.split()[5])
                         print 'Timestep : %s ps' % (self.timestep)
+                        self.times['first'] = float(line.split()[1])
+                        self.times['saved'] = []
                     elif iline == 3:
                         self.box_length = float(line.split()[0])
                         print 'Box length: %s A' % (self.box_length)
                     if (my_step % freqstep) == 0:
+                        if ( np.abs(iline-2) % (4*self.natoms + 4) ) == 0:
+                            self.times['saved'].append(float(line.split()[1]) - self.times['first'])
                         if ( np.abs(iline-2) % (4*self.natoms + 4) ) > 3:
                             my_line = (iline - 6 - 4*step) % 4
                             if  my_line == 0:
@@ -71,6 +77,7 @@ class Traj(object):
                                     if (my_line -1) == mod:
                                         array[step][iatom] += map(float, line.split())
                 self.steps = len(self.positions)
+                self.printed_steps = step
                 print 'Steps: %s' % self.steps
                 for step in range(self.steps):
                     if len(self.positions[step]) != self.natoms:
@@ -79,7 +86,8 @@ class Traj(object):
                 self.velocities = np.array(self.velocities)
                 self.forces= np.array(self.forces)
                 self.is_read = True
-                self.times = np.arange(self.steps) * printstep
+                #self.times['printed'] = printstep * np.arange(self.printed_steps)
+                #self.times['MD'] = self.timestep * np.arange(self.total_steps)
                 self.shift_com()
                 self.unwrap()
                 print "Trajectory is read"
@@ -109,7 +117,7 @@ class Traj(object):
             Z_ws[atom] = np.zeros(length + 1)
         for i in range(3):
             for iatom in range(self.natoms):
-                xaxis, fft = calculate_fft(self.times[:length], self.vel_shifted[:length, iatom, i])
+                xaxis, fft = calculate_fft(self.times['saved'][:length], self.vel_shifted[:length, iatom, i])
                 Z_ws[self.labels[iatom]] += np.abs(fft)**2
         self.Z_ws = {}
         for atom in set(self.labels.values()):
@@ -165,30 +173,28 @@ class Traj(object):
             atoms = set(self.labels.values())
         if length < 0:
             length = int(self.steps / 2)
-        msds = {}
-        msds['time'] = np.arange(length)*self.timestep
+        length = min(length, len(self.times['saved']))
+        self.msds = {}
+        self.times['msd'] = self.times['saved'][:length]
         for atom in atoms:
-            msds[atom] = np.zeros(length)
+            self.msds[atom] = np.zeros(length)
         for tau in range(length):
             vect = np.roll(self.positions, -tau, axis=0) - self.positions
             dist = np.sum(np.power(vect, 2), 2)
             for istep in range(self.steps - tau):
                 for iatom in range(self.natoms):
-                    msds[self.labels[iatom]][tau] += dist[istep, iatom]
+                    self.msds[self.labels[iatom]][tau] += dist[istep, iatom]
             for atom in atoms:
-                msds[atom][tau] = msds[atom][tau] / (self.natoms * (self.steps - tau))
-        self.msds = msds
+                self.msds[atom][tau] = self.msds[atom][tau] / (self.natoms * (self.steps - tau))
 
     def determine_rdf(self, binwidth,  pairs = [], wrap = False):
         if not self.is_read:
             self.read_traj_dlpoly()
         start_tot = time.time()
-        nbins = int(np.sqrt(2) *self.box_length / (2 * binwidth))
-        print "Use nbins for RDF", nbins
-        bins = binwidth * np.array(range(nbins))
+        self.bins['rdf'] = binwidth * np.array(range(int(np.sqrt(2) *self.box_length / (2 * binwidth))))
         rdfs = {}
         for pair in pairs:
-            rdfs[pair] = np.zeros(nbins)
+            rdfs[pair] = np.zeros(len(self.bins['rdf']))
         for iatom in range(self.natoms):
             if (iatom % 1000) == 0:
                 start = time.time()
@@ -205,21 +211,20 @@ class Traj(object):
                            rdfs[pair][int(dist[step]/binwidth)] += 1
             if (iatom % 1000) == 0:
                 print "For atom %s finish in:" % iatom, time.time() - start
-        vol = np.zeros(nbins+1)
-        for i, rr in enumerate(np.append(bins,bins[-1]+binwidth)):
+        vol = np.zeros(len(self.bins['rdf'])+1)
+        for i, rr in enumerate(np.append(self.bins['rdf'],self.bins['rdf'][-1]+binwidth)):
             vol[i] = ((4.0/3.0) * np.pi ) * rr**3
             if rr > self.box_length / 2:
                 x = self.box_length / (2 * rr)
                 vol[i] = vol[i] * ( - 2 + 4.5*x  - 1.5 * x**3)
         for pair in pairs:
             dens = self.count_pair(pair) / self.box_length ** 3
-            histo_id = np.zeros(nbins)
-            for i in range(1, nbins+1):
+            histo_id = np.zeros(len(self.bins['rdf']))
+            for i in range(1, len(self.bins['rdf'])+1):
                 histo_id[i-1] = dens*(vol[i] - vol[i-1])
-            for i in range(1, nbins):
+            for i in range(1, len(self.bins['rdf'])):
                 rdfs[pair][i] = rdfs[pair][i] / histo_id[i]
             rdfs[pair] =  ( 1 + int(pair[0] == pair[1]) )* rdfs[pair] / self.steps
-        self.bins = bins
         self.rdfs = rdfs
         print "Total time is :", time.time() - start_tot
 
@@ -229,29 +234,25 @@ class Traj(object):
         start_tot = time.time()
         if length < 0:
             length = self.box_length
-        nbins = int(length /  binwidth )
-        print "Use nbins for prop", nbins
-        bins = binwidth * np.array(range(nbins))
-        taus = range(0, self.steps, freq_tau)
-        prop = np.zeros( (nbins, len(taus)  ) )
-        list_pos = []
-        for istep in range(self.steps ):
-            for itau, tau in enumerate(taus):
-                vect = self.positions[istep + tau, :, : ] - self.positions[istep, :, :]
-                vect += - self.box_length * np.rint(vect / self.box_length)
-                chi = 1
-                for previous_pos in list_pos:
-                    if (np.sum( (vect - previous_pos)**2 )) < target_size:
+        self.bins['fpt'] = binwidth * np.array(range(int(length /  binwidth )))
+        self.times['fpt'] = range(0, self.steps, freq_tau)
+        count = np.zeros(len(self.times['fpt']))
+        prop = np.zeros( (len(self.bins['fpt']), len(self.times['fpt']) ) )
+        for iatom in range(self.natoms):
+            for itau, tau in enumerate(self.times['fpt']):
+                for subitau, subtau in enumerate(self.times['fpt'][:itau]):
+                    vect = self.positions[subtau:tau,iatom,:] - self.positions[tau, iatom, :]
+                    vect += - self.box_length * np.rint(vect / self.box_length)
+                    chi = 1
+                    if any( np.sum(np.power(vect, 2),1) < target_size ):
                         chi = 0
-                previous_pos.append(vect)
-                dist = np.sqrt(np.sum(np.power(vect, 2), 1))
-                for iatom in range(self.natoms):
-                    if int(dist[iatom]/binwidth) < nbins:
-                        prop[int(dist[iatom]/binwidth), itau] += chi
-            prop[:,itau] = prop[:, itau] / ((self.steps - tau))
+                    dist = np.sum(np.power(vect[0],2))
+                    if int(dist/binwidth) < len(self.bins['fpt']):
+                        prop[int(dist/binwidth), itau - subitau ] += chi
+                    count[itau- subitau] += 1
+        for itau in range(len(self.times['fpt'])):
+            prop[:,itau] = prop[:, itau] /  count[itau]
             prop[:,itau] = prop[:, itau] / (binwidth*np.sum(prop[:,itau]))
-        self.bins_fpt = bins
-        self.taus_fpt = taus
         self.fpt = prop
         print "Total time is :", time.time() - start_tot
 
@@ -262,13 +263,14 @@ class Traj(object):
         start_tot = time.time()
         if length < 0 or wrap:
             length = self.box_length
-        nbins = int(length /  binwidth )
-        print "Use nbins for prop", nbins
-        bins = binwidth * np.array(range(nbins))
-        taus = range(0, self.steps, freq_tau)
-        prop = np.zeros( (nbins, len(taus)  ) )
+        txtwrap = ''
+        if wrap:
+            txtwrap = '_wrap'
+        self.bins['prop' + txtwrap] = binwidth * np.array(range(int(length /  binwidth )))
+        self.times['prop' + txtwrap] = range(0, self.steps, freq_tau)
+        prop = np.zeros( (len(self.bins['prop' + txtwrap]), len(self.times['prop' + txtwrap])  ) )
         max_ = 0
-        for itau, tau in enumerate(taus):
+        for itau, tau in enumerate(self.times['prop' + txtwrap]):
             count = 0
             #print tau, self.steps, len(range(self.steps - tau))
             l_ = []
@@ -284,20 +286,15 @@ class Traj(object):
                 max_ = max(max(dist), max_)
                 for iatom in range(self.natoms):
                     count += 1
-                    if int(dist[iatom]/binwidth) < nbins:
+                    if int(dist[iatom]/binwidth) < len(self.bins['prop' + txtwrap]):
                         prop[int(dist[iatom]/binwidth), itau] += 1
             prop[:,itau] = prop[:, itau] / ((self.steps - tau))
             prop[:,itau] = prop[:, itau] / (binwidth*np.sum(prop[:,itau]))
         if wrap:
-            self.bins_prop_wrap = bins
-            self.taus_prop_wrap = taus
             self.prop_wrap = prop
         else:
-            self.bins_prop = bins
-            self.taus_prop = taus
             self.prop = prop
         print "Max distance is", max_
-        #print count
         print "Total time is :", time.time() - start_tot
 
     def determine_flux(self, freq0, length,  binwidth, pairs = []):
@@ -309,14 +306,12 @@ class Traj(object):
         if not self.is_read:
             self.read_traj_dlpoly()
         start_tot = time.time()
-        nbins = int(np.sqrt(2) *self.box_length / (2 * binwidth))
-        print "Use nbins for RDF", nbins
-        bins = binwidth * np.array(range(nbins))
+        self.bins['flux'] = binwidth * np.array(range(int(np.sqrt(2) *self.box_length / (2 * binwidth))))
         j_rads = {}; j_thetas = {}; rdfs = {}
         for pair in pairs:
-            j_rads[pair] = np.zeros(nbins) 
-            j_thetas[pair] = np.zeros(nbins) 
-            rdfs[pair] = np.zeros(nbins)
+            j_rads[pair] = np.zeros(len(self.bins['flux']))
+            j_thetas[pair] = np.zeros(len(self.bins['flux']))
+            rdfs[pair] = np.zeros(len(self.bins['flux']))
         nsteps_mean = self.steps - length
         for iatom in range(self.natoms):
             deltatild = np.roll(self.positions[:,iatom,:], -length, axis=0) - self.positions[:,iatom,:]
@@ -336,21 +331,20 @@ class Traj(object):
                             rdfs[pair][int(dist[step] / binwidth)] += 1
                             j_rads[pair][int(dist[step] / binwidth) ] += longitudinal[step] / dist[step]**4
                             j_thetas[pair][int(dist[step] / binwidth) ] += longitudinal[step] / dist[step]**4 - transversal[step]/dist[step]**2
-        vol = np.zeros(nbins)
-        for i, rr in enumerate(bins):
+        vol = np.zeros(len(self.bins['flux']))
+        for i, rr in enumerate(self.bins['flux']):
             vol[i] = ((4.0/3.0) * np.pi ) * rr**3
             if rr > self.box_length / 2:
                 x = self.box_length / (2 * rr)
                 vol[i] = vol[i] * ( - 2 + 4.5*x  - 1.5 * x**3)
         for pair in pairs:
-            for i in range(1, nbins):
+            for i in range(1, self.bins['flux']):
               #  j_rads[pair][i] = j_rads[pair][i]
               #  j_thetas[pair][i] = j_thetas[pair][i]
                 rdfs[pair][i] = rdfs[pair][i] / (vol[i] - vol[i-1])
             rdfs[pair] =  ( 1 + int(pair[0] == pair[1]) )* rdfs[pair] * self.box_length ** 3 / (self.count_pair(pair) * nsteps_mean)
             j_rads[pair] = j_rads[pair] / nsteps_mean
             j_thetas[pair] = j_thetas[pair] / nsteps_mean
-        self.bins = bins
         self.rdfs = rdfs
         self.j_rads = j_rads
         self.j_thetas = j_thetas
@@ -368,12 +362,12 @@ class CO2(Traj):
 
     def determine_map(self, binwidth ):
         nbins = int(self.box_length/(2*binwidth))
-        self.bins_map = np.meshgrid(binwidth*np.array(range(nbins)),binwidth*np.array(range(nbins)))
+        self.bins['map'] = np.meshgrid(binwidth*np.array(range(nbins)),binwidth*np.array(range(nbins)))
         self.maps = {}
         for mol in ['CO2']:
             self.maps[mol] = {}
             for atom in set(self.labels.values()):
-                self.maps[mol][atom] = np.zeros((nbins,nbins))
+                self.maps[mol][atom] = np.zeros((len(self.bins['map']),len(self.bins['map'])))
         for imol in range(self.nmols):
             c, o1, o2 = self.mol_indexes[imol]
             u = self.positions[:,o2,:] - self.positions[:,o1,:]
@@ -393,8 +387,8 @@ class CO2(Traj):
                 rhos = rhos.astype(int)
                 zetas = np.rint(np.multiply(u,pos).sum(1) /binwidth).astype(int)
                 for rho, zeta in zip(rhos, zetas):
-                    if (rho < nbins) and (0 < zeta + int(np.rint(nbins / 2)) < nbins):
-                        self.maps[mol][self.labels[iatom]][rho, zeta+int(np.rint(nbins/2)) ] += 1
+                    if (rho < len(self.bins['map'])) and (0 < zeta + int(np.rint(len(self.bins['map']) / 2)) < len(self.bins['map'])):
+                        self.maps[mol][self.labels[iatom]][rho, zeta+int(np.rint(len(self.bins['map'])/2)) ] += 1
 
 
 
