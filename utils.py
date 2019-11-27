@@ -187,6 +187,50 @@ class Traj(object):
             for atom in atoms:
                 self.msds[atom][tau] = self.msds[atom][tau] / (self.natoms * (self.steps - tau))
 
+    def determine_rdf_forces(self, binwidth, pairs = [],):
+        if not self.is_read:
+            self.read_traj_dlpoly()
+        start_tot = time.time()
+        self.bins['rdf_forces'] = binwidth * np.array(range(int(np.sqrt(2) *self.box_length / (2 * binwidth))))
+        self.rdf_forces = {}
+        for pair in pairs:
+            self.rdf_forces [pair] = np.zeros(len(self.bins['rdf_forces']))
+        for iatom in range(self.natoms):
+            if (iatom % 1000) == 0:
+                start = time.time()
+            for iatom2 in [i for i in range(iatom + 1, self.natoms)]:
+                pair = tuple(sorted([self.labels[iatom], self.labels[iatom2]]))
+                if pair in pairs:
+                    vect = (self.positions[:, iatom2, :] - self.positions[:, iatom, :])
+                    vect = vect - self.box_length * np.rint(vect / self.box_length)
+                    dist = np.sqrt(np.sum(np.power(vect, 2), 1))
+                    diff_forces = (self.forces[:,iatom, :] - self.forces[:,iatom2,:])
+                    dot = (diff_forces * vect).sum(1)
+                    toadd = dot / dist**3
+                    for step in range(len(dist)):
+                        n =int(dist[step] / binwidth)
+                        if  n < int((np.sqrt(2) * self.box_length / 2) / binwidth):
+                            for k in range(n+1):
+                                self.rdf_forces[pair][k] += toadd[step]
+            if (iatom % 1000) == 0:
+                print "For atom %s finish in:" % iatom, time.time() - start
+        vol = np.zeros(len(self.bins['rdf_forces'])+1)
+        for i, rr in enumerate(np.append(self.bins['rdf_forces'],self.bins['rdf_forces'][-1]+binwidth)):
+            vol[i] = ((4.0/3.0) * np.pi ) * rr**3
+            if rr > self.box_length / 2:
+                x = self.box_length / (2 * rr)
+                vol[i] = vol[i] * ( - 2 + 4.5*x  - 1.5 * x**3)
+        for pair in pairs:
+            dens = self.count_pair(pair) / self.box_length ** 3
+            histo_id = np.zeros(len(self.bins['rdf_forces']))
+            for i in range(1, len(self.bins['rdf_forces'])+1):
+                histo_id[i-1] = dens*(vol[i] - vol[i-1])
+            for i in range(1, len(self.bins['rdf_forces'])):
+                self.rdf_forces[pair][i] = self.rdf_forces[pair][i] / histo_id[i]
+            self.rdf_forces[pair] =  ( 1 + int(pair[0] == pair[1]) )* self.rdf_forces[pair] / self.steps
+        print "Total time is :", time.time() - start_tot
+
+
     def determine_rdf(self, binwidth,  pairs = [], wrap = False):
         if not self.is_read:
             self.read_traj_dlpoly()
