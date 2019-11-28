@@ -187,7 +187,7 @@ class Traj(object):
             for atom in atoms:
                 self.msds[atom][tau] = self.msds[atom][tau] / (self.natoms * (self.steps - tau))
 
-    def determine_rdf_forces(self, binwidth, pairs = [],):
+    def determine_rdf_forces(self, binwidth, kbT, pairs = [], ):
         if not self.is_read:
             self.read_traj_dlpoly()
         start_tot = time.time()
@@ -204,7 +204,7 @@ class Traj(object):
                     vect = (self.positions[:, iatom2, :] - self.positions[:, iatom, :])
                     vect = vect - self.box_length * np.rint(vect / self.box_length)
                     dist = np.sqrt(np.sum(np.power(vect, 2), 1))
-                    diff_forces = (self.forces[:,iatom, :] - self.forces[:,iatom2,:])
+                    diff_forces = (self.forces[:,iatom2, :] - self.forces[:,iatom,:])
                     dot = (diff_forces * vect).sum(1)
                     toadd = dot / dist**3
                     for step in range(len(dist)):
@@ -212,6 +212,8 @@ class Traj(object):
                         if  n < int((np.sqrt(2) * self.box_length / 2) / binwidth):
                             for k in range(n+1):
                                 self.rdf_forces[pair][k] += toadd[step]
+                            #for k in range(n,len(self.bins['rdf_forces'])):
+                            #    self.rdf_forces[pair][k] += toadd[step]
             if (iatom % 1000) == 0:
                 print "For atom %s finish in:" % iatom, time.time() - start
         vol = np.zeros(len(self.bins['rdf_forces'])+1)
@@ -225,9 +227,9 @@ class Traj(object):
             histo_id = np.zeros(len(self.bins['rdf_forces']))
             for i in range(1, len(self.bins['rdf_forces'])+1):
                 histo_id[i-1] = dens*(vol[i] - vol[i-1])
-            for i in range(1, len(self.bins['rdf_forces'])):
-                self.rdf_forces[pair][i] = self.rdf_forces[pair][i] / histo_id[i]
-            self.rdf_forces[pair] =  ( 1 + int(pair[0] == pair[1]) )* self.rdf_forces[pair] / self.steps
+            #for i in range(1, len(self.bins['rdf_forces'])):
+            #    self.rdf_forces[pair][i] = self.rdf_forces[pair][i] / histo_id[i]
+            self.rdf_forces[pair] =  - ( 1 + 0.5*int(pair[0] == pair[1]) )* self.rdf_forces[pair] / (4*np.pi*kbT*self.steps * dens)
         print "Total time is :", time.time() - start_tot
 
 
