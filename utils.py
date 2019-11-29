@@ -86,6 +86,7 @@ class Traj(object):
                 self.velocities = np.array(self.velocities)
                 self.forces= np.array(self.forces)
                 self.is_read = True
+                self.times['saved'] = np.array(self.times['saved'])
                 #self.times['printed'] = printstep * np.arange(self.printed_steps)
                 #self.times['MD'] = self.timestep * np.arange(self.total_steps)
                 self.shift_com()
@@ -192,8 +193,11 @@ class Traj(object):
             self.read_traj_dlpoly()
         start_tot = time.time()
         self.bins['rdf_forces'] = binwidth * np.array(range(int(np.sqrt(2) *self.box_length / (2 * binwidth))))
+        self.bins['rdf_forces'] = binwidth * np.array(range(int(self.box_length / binwidth)))
         self.rdf_forces = {}
+        count = {}
         for pair in pairs:
+            count[pair] = 0
             self.rdf_forces [pair] = np.zeros(len(self.bins['rdf_forces']))
         for iatom in range(self.natoms):
             if (iatom % 1000) == 0:
@@ -204,21 +208,27 @@ class Traj(object):
                     vect = (self.positions[:, iatom2, :] - self.positions[:, iatom, :])
                     vect = vect - self.box_length * np.rint(vect / self.box_length)
                     dist = np.sqrt(np.sum(np.power(vect, 2), 1))
-                    diff_forces = (self.forces[:,iatom2, :] - self.forces[:,iatom,:])
+                    diff_forces = 0.5*(self.forces[:,iatom2, :] - self.forces[:,iatom,:])
                     dot = (diff_forces * vect).sum(1)
                     toadd = dot / dist**3
                     for step in range(len(dist)):
                         n =int(dist[step] / binwidth)
-                        if  n < int((np.sqrt(2) * self.box_length / 2) / binwidth):
+                        lim = int((np.sqrt(2) * self.box_length / 2) / binwidth)
+                        lim = int(self.box_length/ (2*binwidth))
+                        lim = int(self.box_length/binwidth)
+                        if  n < lim:
+                            #count[pair]
                             for k in range(n+1):
                                 self.rdf_forces[pair][k] += toadd[step]
                             #for k in range(n,len(self.bins['rdf_forces'])):
                             #    self.rdf_forces[pair][k] += toadd[step]
+                        else:
+                            print n, lim
             if (iatom % 1000) == 0:
                 print "For atom %s finish in:" % iatom, time.time() - start
         for pair in pairs:
-            dens = self.count_pair(pair) / self.box_length ** 3
-            self.rdf_forces[pair] =  - ( 1 + 0.5*int(pair[0] == pair[1]) )* self.rdf_forces[pair] / (4*np.pi*kbT*self.steps * dens)
+            eps = ( 1 - 0.5*int(pair[0] == pair[1]) )* self.box_length**3 / self.count_pair(pair)
+            self.rdf_forces[pair] =  - eps* self.rdf_forces[pair] / (4*np.pi*kbT*self.steps)
         print "Total time is :", time.time() - start_tot
 
 
@@ -270,24 +280,27 @@ class Traj(object):
         if length < 0:
             length = self.box_length
         self.bins['fpt'] = binwidth * np.array(range(int(length /  binwidth )))
-        self.times['fpt'] = range(0, self.steps, freq_tau)
+        local_step = range(0, self.steps, freq_tau)
+        self.times['fpt'] = np.array([self.times['saved'][k] for k in local_step ])
         count = np.zeros(len(self.times['fpt']))
         prop = np.zeros( (len(self.bins['fpt']), len(self.times['fpt']) ) )
         for iatom in range(self.natoms):
-            for itau, tau in enumerate(self.times['fpt']):
-                for subitau, subtau in enumerate(self.times['fpt'][:itau]):
+            for itau, tau in enumerate(local_step):
+                for subitau, subtau in enumerate(local_step[:itau]):
                     vect = self.positions[subtau:tau,iatom,:] - self.positions[tau, iatom, :]
                     vect += - self.box_length * np.rint(vect / self.box_length)
                     chi = 1
                     if any( np.sum(np.power(vect, 2),1) < target_size ):
                         chi = 0
-                    dist = np.sum(np.power(vect[0],2))
+                    dist = np.sqrt(np.sum(np.power(vect[0],2)))
                     if int(dist/binwidth) < len(self.bins['fpt']):
                         prop[int(dist/binwidth), itau - subitau ] += chi
                     count[itau- subitau] += 1
         for itau in range(len(self.times['fpt'])):
-            prop[:,itau] = prop[:, itau] /  count[itau]
-            prop[:,itau] = prop[:, itau] / (binwidth*np.sum(prop[:,itau]))
+            if count[itau] > 0:
+                prop[:,itau] = prop[:, itau] /  count[itau]
+            if np.sum(prop[:,itau]) > 0:
+                prop[:,itau] = prop[:, itau] / (binwidth*np.sum(prop[:,itau]))
         self.fpt = prop
         print "Total time is :", time.time() - start_tot
 
@@ -302,10 +315,11 @@ class Traj(object):
         if wrap:
             txtwrap = '_wrap'
         self.bins['prop' + txtwrap] = binwidth * np.array(range(int(length /  binwidth )))
-        self.times['prop' + txtwrap] = range(0, self.steps, freq_tau)
+        local_step = range(0, self.steps, freq_tau)
+        self.times['prop' + txtwrap] = np.array([self.times['saved'][k] for k in local_step ])
         prop = np.zeros( (len(self.bins['prop' + txtwrap]), len(self.times['prop' + txtwrap])  ) )
         max_ = 0
-        for itau, tau in enumerate(self.times['prop' + txtwrap]):
+        for itau, tau in enumerate(local_step):
             count = 0
             #print tau, self.steps, len(range(self.steps - tau))
             l_ = []
@@ -315,9 +329,6 @@ class Traj(object):
                 if wrap:
                     vect += - self.box_length * np.rint(vect / self.box_length)
                 dist = np.sqrt(np.sum(np.power(vect, 2), 1))
-                if np.isnan(dist).any():
-                    print "problem in dist"
-                    stop
                 max_ = max(max(dist), max_)
                 for iatom in range(self.natoms):
                     count += 1
