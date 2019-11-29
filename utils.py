@@ -14,6 +14,13 @@ def calculate_fft(time, serie):
     xaxis = np.arange(length) * (np.pi / time[-1])
     return xaxis, fft
 
+class Molecule(object):
+
+    def __init__(self, label, atoms):
+        self.label = label
+        self.atoms = atoms
+
+
 class Traj(object):
     
     def __init__(self, path):
@@ -91,7 +98,13 @@ class Traj(object):
                 #self.times['MD'] = self.timestep * np.arange(self.total_steps)
                 self.shift_com()
                 self.unwrap()
+                self.build_molecules()
                 print "Trajectory is read"
+
+    def build_molecules(self):
+        self.find_molecules = {}
+        for iatom in range(self.natoms):
+            self.find_molecules[iatom] = Molecule(label = self.labels[iatom], atoms = [iatom,])
 
     def unwrap(self):
         #print 0, self.positions[0, 410, :]
@@ -204,7 +217,7 @@ class Traj(object):
                 start = time.time()
             for iatom2 in [i for i in range(iatom + 1, self.natoms)]:
                 pair = tuple(sorted([self.labels[iatom], self.labels[iatom2]]))
-                if pair in pairs:
+                if pair in pairs and iatom2 not in self.find_molecules[iatom].atoms:
                     vect = (self.positions[:, iatom2, :] - self.positions[:, iatom, :])
                     vect = vect - self.box_length * np.rint(vect / self.box_length)
                     dist = np.sqrt(np.sum(np.power(vect, 2), 1))
@@ -217,7 +230,7 @@ class Traj(object):
                         lim = int(self.box_length/ (2*binwidth))
                         lim = int(self.box_length/binwidth)
                         if  n < lim:
-                            #count[pair]
+                            count[pair] += 1
                             for k in range(n+1):
                                 self.rdf_forces[pair][k] += toadd[step]
                             #for k in range(n,len(self.bins['rdf_forces'])):
@@ -227,7 +240,10 @@ class Traj(object):
             if (iatom % 1000) == 0:
                 print "For atom %s finish in:" % iatom, time.time() - start
         for pair in pairs:
-            eps = ( 1 - 0.5*int(pair[0] == pair[1]) )* self.box_length**3 / self.count_pair(pair)
+            print pair
+            print count[pair]
+            print self.count_pair(pair) * self.steps / ( ( 1 + int(pair[0] == pair[1]) ))
+            eps = ( 1 + int(pair[0] == pair[1]) )* self.box_length**3 / self.count_pair(pair)
             self.rdf_forces[pair] =  - eps* self.rdf_forces[pair] / (4*np.pi*kbT*self.steps)
         print "Total time is :", time.time() - start_tot
 
@@ -403,8 +419,14 @@ class CO2(Traj):
     def build_molecules(self):
         self.nmols = self.natoms / 3
         self.mol_indexes = range(self.nmols)
+        self.molecules = {}
+        self.find_molecules = {}
         for imol in range(self.nmols):
             self.mol_indexes[imol] = [imol*3, imol*3+1, imol*3+2]
+            self.molecules[imol] = Molecule(label='CO2', atoms = [imol*3, imol*3+1, imol*3+2])
+            for iatom in range(3):
+                self.find_molecules[imol*3+iatom] = self.molecules[imol]
+
 
     def determine_map(self, binwidth ):
         nbins = int(self.box_length/(2*binwidth))
