@@ -216,19 +216,8 @@ class Traj(object):
                             #    self.rdf_forces[pair][k] += toadd[step]
             if (iatom % 1000) == 0:
                 print "For atom %s finish in:" % iatom, time.time() - start
-        vol = np.zeros(len(self.bins['rdf_forces'])+1)
-        for i, rr in enumerate(np.append(self.bins['rdf_forces'],self.bins['rdf_forces'][-1]+binwidth)):
-            vol[i] = ((4.0/3.0) * np.pi ) * rr**3
-            if rr > self.box_length / 2:
-                x = self.box_length / (2 * rr)
-                vol[i] = vol[i] * ( - 2 + 4.5*x  - 1.5 * x**3)
         for pair in pairs:
             dens = self.count_pair(pair) / self.box_length ** 3
-            histo_id = np.zeros(len(self.bins['rdf_forces']))
-            for i in range(1, len(self.bins['rdf_forces'])+1):
-                histo_id[i-1] = dens*(vol[i] - vol[i-1])
-            #for i in range(1, len(self.bins['rdf_forces'])):
-            #    self.rdf_forces[pair][i] = self.rdf_forces[pair][i] / histo_id[i]
             self.rdf_forces[pair] =  - ( 1 + 0.5*int(pair[0] == pair[1]) )* self.rdf_forces[pair] / (4*np.pi*kbT*self.steps * dens)
         print "Total time is :", time.time() - start_tot
 
