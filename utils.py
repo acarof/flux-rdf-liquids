@@ -429,35 +429,45 @@ class CO2(Traj):
 
 
     def determine_map(self, binwidth ):
+        start_tot = time.time()
         nbins = int(self.box_length/(2*binwidth))
         self.bins['map'] = np.meshgrid(binwidth*np.array(range(nbins)),binwidth*np.array(range(nbins)))
         self.maps = {}
         for mol in ['CO2']:
             self.maps[mol] = {}
             for atom in set(self.labels.values()):
-                self.maps[mol][atom] = np.zeros((len(self.bins['map']),len(self.bins['map'])))
+                self.maps[mol][atom] = np.zeros((nbins, nbins))
         for imol in range(self.nmols):
+            if (imol % 500) == 0:
+                start = time.time()
             c, o1, o2 = self.mol_indexes[imol]
             u = self.positions[:,o2,:] - self.positions[:,o1,:]
             u += - self.box_length*np.rint(u/self.box_length)
-            u = u / np.linalg.norm(u)
+            #u = u / np.sqrt((u**2).sum(1))
+            for step in range(self.steps):
+                u[step] = u[step] / np.sqrt((u[step]**2).sum())
             vect1 = self.positions[:,o1,:]
             vect1 += - self.box_length*np.rint(vect1/self.box_length)
             vect2 = self.positions[:,o2,:]
             vect2 += - self.box_length*np.rint(vect1/self.box_length)
             mean = (vect1 + vect2)/2
             for iatom in range(self.natoms):
-                pos = self.positions[:,iatom,:] - mean
-                pos += - self.box_length*np.rint(pos/self.box_length)
-                rhos = np.zeros(self.steps)
-                for step in range(self.steps):
-                    rhos[step] = np.rint( np.linalg.norm( np.cross(u[step], pos[step]) )/binwidth )
-                rhos = rhos.astype(int)
-                zetas = np.rint(np.multiply(u,pos).sum(1) /binwidth).astype(int)
-                for rho, zeta in zip(rhos, zetas):
-                    if (rho < len(self.bins['map'])) and (0 < zeta + int(np.rint(len(self.bins['map']) / 2)) < len(self.bins['map'])):
-                        self.maps[mol][self.labels[iatom]][rho, zeta+int(np.rint(len(self.bins['map'])/2)) ] += 1
-
+                if iatom not in self.mol_indexes[imol]:
+                    pos = self.positions[:,iatom,:] - mean
+                    pos += - self.box_length*np.rint(pos/self.box_length)
+                    #rhos = np.zeros(self.steps)
+                    #for step in range(self.steps):
+                    #    rhos[step] = np.rint( np.linalg.norm( np.cross(u[step], pos[step]) )/binwidth )
+                    #rhos = rhos.astype(int)
+                    dot = np.multiply(u,pos).sum(1)
+                    rhos = np.rint(np.sqrt(np.abs((pos**2).sum(1) -dot**2   )) / binwidth).astype(int)
+                    zetas = np.rint( dot /binwidth).astype(int)
+                    for rho, zeta in zip(rhos, zetas):
+                        if (rho < nbins) and (0 < zeta + int(np.rint(nbins / 2)) < nbins):
+                            self.maps[mol][self.labels[iatom]][rho, zeta+int(np.rint(nbins/2)) ] += 1
+            if (imol % 500) == 0:
+                print "For atom %s finish in:" % imol, time.time() - start
+        print "Total time is :", time.time() - start_tot
 
 
 def correlation_matrix(array, length = -1, start = 0):
