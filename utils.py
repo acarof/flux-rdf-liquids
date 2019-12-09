@@ -443,28 +443,29 @@ class CO2(Traj):
             c, o1, o2 = self.mol_indexes[imol]
             u = self.positions[:,o2,:] - self.positions[:,o1,:]
             u += - self.box_length*np.rint(u/self.box_length)
-            #u = u / np.sqrt((u**2).sum(1))
-            for step in range(self.steps):
-                u[step] = u[step] / np.sqrt((u[step]**2).sum())
+            row_sum =  np.sqrt((u**2).sum(1, keepdims=True))
+            u = u / row_sum
             vect1 = self.positions[:,o1,:]
             vect1 += - self.box_length*np.rint(vect1/self.box_length)
             vect2 = self.positions[:,o2,:]
             vect2 += - self.box_length*np.rint(vect1/self.box_length)
             mean = (vect1 + vect2)/2
-            for iatom in range(self.natoms):
-                if iatom not in self.mol_indexes[imol]:
-                    pos = self.positions[:,iatom,:] - mean
-                    pos += - self.box_length*np.rint(pos/self.box_length)
-                    #rhos = np.zeros(self.steps)
-                    #for step in range(self.steps):
-                    #    rhos[step] = np.rint( np.linalg.norm( np.cross(u[step], pos[step]) )/binwidth )
-                    #rhos = rhos.astype(int)
-                    dot = np.multiply(u,pos).sum(1)
-                    rhos = np.rint(np.sqrt(np.abs((pos**2).sum(1) -dot**2   )) / binwidth).astype(int)
-                    zetas = np.rint( dot /binwidth).astype(int)
-                    for rho, zeta in zip(rhos, zetas):
-                        if (rho < nbins) and (0 < zeta + int(np.rint(nbins / 2)) < nbins):
-                            self.maps[mol][self.labels[iatom]][rho, zeta+int(np.rint(nbins/2)) ] += 1
+            latoms = range(self.natoms)
+            for iatom in self.mol_indexes[imol]:
+                latoms.remove(iatom)
+            for iatom in latoms:
+                pos = self.positions[:,iatom,:] - mean
+                pos += - self.box_length*np.rint(pos/self.box_length)
+                #rhos = np.zeros(self.steps)
+                #for step in range(self.steps):
+                #    rhos[step] = np.rint( np.linalg.norm( np.cross(u[step], pos[step]) )/binwidth )
+                #rhos = rhos.astype(int)
+                dot = np.multiply(u,pos).sum(1)
+                rhos = np.rint(np.sqrt(np.abs((pos**2).sum(1) -dot**2   )) / binwidth).astype(int)
+                zetas = np.rint( dot /binwidth).astype(int)
+                for rho, zeta in zip(rhos, zetas):
+                    if (rho < nbins) and (0 < zeta + int(np.rint(nbins / 2)) < nbins):
+                        self.maps[mol][self.labels[iatom]][rho, zeta+int(np.rint(nbins/2)) ] += 1
             if (imol % 500) == 0:
                 print "For atom %s finish in:" % imol, time.time() - start
         print "Total time is :", time.time() - start_tot
@@ -498,3 +499,8 @@ def write_flux_function(path, bins, values):
          f.write('R   F\n')
          for r, value in zip(bins, values):
              f.write('%s    %s\n' % (r, value))
+
+def write_map(path, map_):
+    with open(path, 'w') as f:
+        for line in map_:
+            f.write('%s\n' % ' '.join(map(str, line)))
