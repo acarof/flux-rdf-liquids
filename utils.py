@@ -456,18 +456,20 @@ class CO2(Traj):
             for iatom in latoms:
                 pos = self.positions[:,iatom,:] - mean
                 pos += - self.box_length*np.rint(pos/self.box_length)
-                #rhos = np.zeros(self.steps)
-                #for step in range(self.steps):
-                #    rhos[step] = np.rint( np.linalg.norm( np.cross(u[step], pos[step]) )/binwidth )
-                #rhos = rhos.astype(int)
                 dot = np.multiply(u,pos).sum(1)
-                rhos = np.rint(np.sqrt(np.abs((pos**2).sum(1) -dot**2   )) / binwidth).astype(int)
+                row_dot = np.multiply(u,pos).sum(1, keepdims = True)
+                #rhos = np.rint(np.sqrt(np.abs((pos**2).sum(1) -dot**2   )) / binwidth).astype(int)
+                rhos =  np.rint( np.sqrt( ((pos - row_dot * u)**2).sum(1) ) / binwidth).astype(int)
                 zetas = np.rint( dot /binwidth).astype(int)
                 for rho, zeta in zip(rhos, zetas):
                     if (rho < nbins) and (0 < zeta + int(np.rint(nbins / 2)) < nbins):
                         self.maps[mol][self.labels[iatom]][rho, zeta+int(np.rint(nbins/2)) ] += 1
             if (imol % 500) == 0:
                 print "For atom %s finish in:" % imol, time.time() - start
+        vol = (2*np.pi*binwidth**3*np.arange(1, nbins+1, 1))[:, np.newaxis]
+        for mol in ['CO2']:
+            for atom in set(self.labels.values()):
+                self.maps[mol][atom] = self.maps[mol][atom] / vol
         print "Total time is :", time.time() - start_tot
 
 
