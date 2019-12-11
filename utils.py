@@ -107,12 +107,21 @@ class Traj(object):
     def build_molecules(self):
         self.nmols = self.natoms
         self.molecules = {}
-        self.find_molecules = {}
-        self.labels_mol = {}
         for imol in range(self.nmols):
             self.molecules[imol] = Molecule(label = self.labels[imol], atoms = [imol,])
-            self.find_molecules[imol] = self.molecules[imol]
+        self.associate_atoms_mol()
+
+    def associate_atoms_mol(self):
+        ii = -1
+        self.labels_mol = {}
+        self.find_molecules = {}
+        for imol in self.molecules:
             self.labels_mol[imol] = self.molecules[imol].label
+            for iatom in self.molecules[imol].atoms:
+                ii += 1
+                self.find_molecules[ii] = self.molecules[imol]
+
+
 
     def unwrap(self):
         #print 0, self.positions[0, 410, :]
@@ -285,6 +294,11 @@ class Traj(object):
         if not self.is_read:
             self.read_traj_dlpoly()
         start_tot = time.time()
+        if len(pairs) == 0:
+            for atom in set(self.labels.values()):
+                for atom2 in set(self.labels.values()):
+                    pairs.append( tuple( sorted( (atom, atom2))))
+            pairs = set(pairs)
         self.bins['rdf_forces'] = binwidth * np.array(range(int(np.sqrt(2) *self.box_length / (2 * binwidth))))
         self.bins['rdf_forces'] = binwidth * np.array(range(int(self.box_length / binwidth)))
         self.rdf_forces = {}
@@ -505,13 +519,9 @@ class CO2(Traj):
     def build_molecules(self):
         self.nmols = self.natoms / 3
         self.molecules = {}
-        self.find_molecules = {}
-        self.labels_mol = {}
         for imol in range(self.nmols):
             self.molecules[imol] = Molecule(label='CO2', atoms = [imol*3, imol*3+1, imol*3+2])
-            for iatom in range(3):
-                self.find_molecules[imol*3+iatom] = self.molecules[imol]
-            self.labels_mol[imol] = self.molecules[imol].label
+        self.associate_atoms_mol()
 
 
     def determine_map(self, binwidth ):
