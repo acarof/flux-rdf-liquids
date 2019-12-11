@@ -28,8 +28,10 @@ class Traj(object):
         self.natoms = 0
         self.mass = 28 
         self.is_read = False
+        self.did_cm = False
         self.times = {}
         self.bins = {}
+        self.mass = {}
 
     #@profile
     def read_traj_dlpoly(self, freqstep = 1, printstep = 0):
@@ -99,12 +101,18 @@ class Traj(object):
                 self.shift_com()
                 self.unwrap()
                 self.build_molecules()
+                self.calculate_cm()
                 print "Trajectory is read"
 
     def build_molecules(self):
+        self.nmols = self.natoms
+        self.molecules = {}
         self.find_molecules = {}
-        for iatom in range(self.natoms):
-            self.find_molecules[iatom] = Molecule(label = self.labels[iatom], atoms = [iatom,])
+        self.labels_mol = {}
+        for imol in range(self.nmols):
+            self.molecules[imol] = Molecule(label = self.labels[imol], atoms = [imol,])
+            self.find_molecules[imol] = self.molecules[imol]
+            self.labels_mol[imol] = self.molecules[imol].label
 
     def unwrap(self):
         #print 0, self.positions[0, 410, :]
@@ -122,6 +130,22 @@ class Traj(object):
     def shift_com(self):
         com_vel = np.mean(self.velocities, axis = 0)
         self.vel_shifted = self.velocities - com_vel
+
+    def calculate_cm(self):
+        self.positions_cm = np.zeros((self.steps, self.nmols, 3 ))
+        self.velocities_cm = np.zeros((self.steps, self.nmols, 3))
+        self.forces_cm = np.zeros((self.steps, self.nmols, 3))
+        for imol in range(self.nmols):
+            mass_mol = 0.0
+            for iatom in self.molecules[imol].atoms:
+                mass_mol += self.mass.get(self.labels[iatom], 1)
+                self.positions_cm[:,imol,:] += self.mass.get(self.labels[iatom], 1) * self.positions[:,iatom,:]
+                self.velocities_cm[:, imol, :] += self.mass.get(self.labels[iatom], 1) * self.velocities[:, iatom, :]
+                self.forces_cm[:, imol, :] +=  self.forces[:, iatom, :]
+            self.positions_cm[:,imol,:] = self.positions_cm[:,imol,:] / mass_mol
+            self.velocities_cm[:,imol,:] = self.velocities_cm[:, imol, :]  / mass_mol
+        self.did_cm = True
+
 
     def calculate_spectral_density(self, length = -1, ):
         if length < 0:
@@ -182,6 +206,12 @@ class Traj(object):
              result = result * self.labels.values().count(atom)
         return result
 
+    def count_pair_mol(self, pair):
+        result = 1.0
+        for mol in pair:
+             result = result * self.labels_mol.values().count(mol)
+        return result
+
     def determine_msd(self, length = -1, atoms = ()):
         if atoms == ():
             atoms = set(self.labels.values())
@@ -200,6 +230,56 @@ class Traj(object):
                     self.msds[self.labels[iatom]][tau] += dist[istep, iatom]
             for atom in atoms:
                 self.msds[atom][tau] = self.msds[atom][tau] / (self.natoms * (self.steps - tau))
+
+    def determine_rdf_cm_forces(self, binwidth, kbT, pairs = [], ):
+        if not self.did_cm:
+            self.calculate_cm()
+        if len(pairs) == 0:
+            for mol in set(self.labels_mol.values()):
+                for mol2 in set(self.labels_mol.values()):
+                    pairs.append( tuple( sorted( (mol, mol2) )))
+            pairs = set(pairs)
+        start_tot = time.time()
+        self.bins['rdf_cm_forces'] = binwidth * np.array(range(int(np.sqrt(2) *self.box_length / (2 * binwidth))))
+        self.bins['rdf_cm_forces'] = binwidth * np.array(range(int(self.box_length / binwidth)))
+        self.rdf_cm_forces = {}
+        count = {}
+        for pair in pairs:
+            count[pair] = 0
+            self.rdf_cm_forces [pair] = np.zeros(len(self.bins['rdf_cm_forces']))
+        for imol in range(self.nmols):
+            if (imol % 1000) == 0:
+                start = time.time()
+            for imol2 in [i for i in range(imol + 1, self.nmols)]:
+                pair = tuple(sorted([self.molecules[imol].label, self.molecules[imol].label]))
+                vect = (self.positions_cm[:, imol2, :] - self.positions_cm[:, imol, :])
+                vect = vect - self.box_length * np.rint(vect / self.box_length)
+                dist = np.sqrt(np.sum(np.power(vect, 2), 1))
+                diff_forces = 0.5*(self.forces_cm[:,imol2, :] - self.forces_cm[:,imol,:])
+                dot = (diff_forces * vect).sum(1)
+                toadd = dot / dist**3
+                for step in range(len(dist)):
+                    n =int(dist[step] / binwidth)
+                    lim = int((np.sqrt(2) * self.box_length / 2) / binwidth)
+                    lim = int(self.box_length/ (2*binwidth))
+                    lim = int(self.box_length/binwidth)
+                    if  n < lim:
+                        count[pair] += 1
+                        for k in range(n+1):
+                            self.rdf_cm_forces[pair][k] += toadd[step]
+                        #for k in range(n,len(self.bins['rdf_forces'])):
+                        #    self.rdf_forces[pair][k] += toadd[step]
+                    else:
+                        print n, lim
+            if (imol % 1000) == 0:
+                print "For mol %s finish in:" % imol, time.time() - start
+        for pair in pairs:
+            print pair
+            print count[pair]
+            print self.count_pair_mol(pair) * self.steps / ( ( 1 + int(pair[0] == pair[1]) ))
+            eps = ( 1 + int(pair[0] == pair[1]) )* self.box_length**3 / self.count_pair_mol(pair)
+            self.rdf_cm_forces[pair] =  - eps* self.rdf_cm_forces[pair] / (4*np.pi*kbT*self.steps)
+        print "Total time is :", time.time() - start_tot
 
     def determine_rdf_forces(self, binwidth, kbT, pairs = [], ):
         if not self.is_read:
@@ -251,6 +331,11 @@ class Traj(object):
     def determine_rdf(self, binwidth,  pairs = [], wrap = False):
         if not self.is_read:
             self.read_traj_dlpoly()
+        if len(pairs) == 0:
+            for atom in set(self.labels.values()):
+                for atom2 in set(self.labels.values()):
+                    pairs.append( tuple( sorted( (atom, atom2))))
+            pairs = set(pairs)
         start_tot = time.time()
         self.bins['rdf'] = binwidth * np.array(range(int(np.sqrt(2) *self.box_length / (2 * binwidth))))
         rdfs = {}
@@ -415,17 +500,18 @@ class Traj(object):
 class CO2(Traj):
     def __init__(self, path):
         super(CO2, self). __init__(path=path)
+        self.mass = { 'C' : 12.011, 'O' : 15.99}
 
     def build_molecules(self):
         self.nmols = self.natoms / 3
-        self.mol_indexes = range(self.nmols)
         self.molecules = {}
         self.find_molecules = {}
+        self.labels_mol = {}
         for imol in range(self.nmols):
-            self.mol_indexes[imol] = [imol*3, imol*3+1, imol*3+2]
             self.molecules[imol] = Molecule(label='CO2', atoms = [imol*3, imol*3+1, imol*3+2])
             for iatom in range(3):
                 self.find_molecules[imol*3+iatom] = self.molecules[imol]
+            self.labels_mol[imol] = self.molecules[imol].label
 
 
     def determine_map(self, binwidth ):
@@ -440,7 +526,7 @@ class CO2(Traj):
         for imol in range(self.nmols):
             if (imol % 500) == 0:
                 start = time.time()
-            c, o1, o2 = self.mol_indexes[imol]
+            c, o1, o2 = self.molecules[imol].atoms
             u = self.positions[:,o2,:] - self.positions[:,o1,:]
             u += - self.box_length*np.rint(u/self.box_length)
             row_sum =  np.sqrt((u**2).sum(1, keepdims=True))
@@ -451,7 +537,7 @@ class CO2(Traj):
             vect2 += - self.box_length*np.rint(vect1/self.box_length)
             mean = (vect1 + vect2)/2
             latoms = range(self.natoms)
-            for iatom in self.mol_indexes[imol]:
+            for iatom in self.molecules[imol].atoms:
                 latoms.remove(iatom)
             for iatom in latoms:
                 pos = self.positions[:,iatom,:] - mean
