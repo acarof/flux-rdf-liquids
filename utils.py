@@ -95,7 +95,7 @@ class Traj(object):
                 self.velocities = np.array(self.velocities)
                 self.forces= np.array(self.forces)
                 self.is_read = True
-                self.times['saved'] = np.array(self.times['saved'])
+                self.times['saved'] = np.array(self.times['saved'])*self.timestep
                 #self.times['printed'] = printstep * np.arange(self.printed_steps)
                 #self.times['MD'] = self.timestep * np.arange(self.total_steps)
                 self.shift_com()
