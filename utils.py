@@ -6,6 +6,7 @@ import scipy.linalg
 import time, sys
 #import psutil
 #from guppy import hpy
+#test
 
 def calculate_fft(time, serie):
     serie = np.append(serie, np.zeros(serie.shape))
