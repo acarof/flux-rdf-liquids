@@ -241,6 +241,46 @@ class Traj(object):
             for atom in atoms:
                 self.msds[atom][tau] = self.msds[atom][tau] / (self.natoms * (self.steps - tau))
 
+    def determine_fluctuations_volume(self, binwidth, atoms = [], nrand = 1):
+        start_tot = time.time()
+        freqstep = max(1, self.steps / nrand)
+        repeat = max(1, nrand/self.steps)
+        if atoms == []:
+            atoms = set(self.labels.values())
+        probas = {}
+        self.void = {}
+        nbins = (int(self.box_length / (2*binwidth)))
+        self.bins['fluct_vol'] = binwidth*np.array(range(1, nbins+1))
+        index = 0
+        for atom in atoms:
+            probas[atom] = np.zeros((nbins, self.natoms))
+            self.void[atom] = []
+        for rep in range(repeat):
+            new_pos = self.positions[::freqstep,:,:]
+            rand = np.random.rand(new_pos.shape[0], 3)
+            rand = rand*self.box_length
+            new_pos = new_pos - rand[:,None,:]
+            new_pos += - self.box_length * np.rint(new_pos / self.box_length)
+            dist = np.sqrt(np.sum(np.power(new_pos, 2),2))
+            idist = np.ceil(dist/binwidth)
+            for step in range(idist.shape[0]):
+                index += 1
+                if (index % 1000) == 0:
+                    print "For irand %s finish in:" % index, time.time() - start_tot
+                for atom in atoms:
+                    natom_pres = 0
+                    self.void[atom].append(min(dist[step]))
+                    for ibin in range(probas[atom].shape[0]):
+                        mask = [x == atom for x in self.labels.values()]
+                        bool_list = [d==ibin and lab for (d,lab) in zip(idist[step],mask)]
+                        natom_pres += np.sum(bool_list)
+                        probas[atom][ibin, natom_pres] += 1
+        self.fluct_vol = probas
+        print "Total time is :", time.time() - start_tot
+        #print probas['C']
+
+
+
     def determine_rdf_cm_forces(self, binwidth, kbT, pairs = [], ):
         if not self.did_cm:
             self.calculate_cm()
@@ -603,3 +643,8 @@ def write_map(path, map_):
     with open(path, 'w') as f:
         for line in map_:
             f.write('%s\n' % ' '.join(map(str, line)))
+
+def write_list(path, list_ ):
+    with open(path, 'w') as f:
+        for line in list_:
+            f.write('%s\n' % str(line))
