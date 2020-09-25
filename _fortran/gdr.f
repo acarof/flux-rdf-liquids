@@ -1,4 +1,17 @@
        PROGRAM GDR
+! Original program from Jean-Marc Simon
+! To do to improve:
+               ! - create first a regtest
+               !-read dl_poly: box_size, position, should know the
+               !config level
+               !- proper name for output file
+               !- allocate dynamically
+               !- obtain info from command line
+               !- run it from python which will create automatically the
+               !command line
+               !- use new fortran standard
+
+      
          integer ntot, maxmol
          parameter (ntot=100000, maxmol=100000)
          character*2 atom
