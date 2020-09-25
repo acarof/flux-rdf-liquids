@@ -63,6 +63,13 @@ class Traj(object):
                         #    print h.heap()
                     if iline == 1:
                         self.natoms = int(line.split()[2])
+                        self.number_config = int(line.split()[0])
+                        if self.number_config == 0:
+                            list_array = [self.positions]
+                            print "Only positions"
+                        elif self.number_config == 1:
+                            list_array = [self.positions, self.velocities]
+                            print 'Only velocities'
                         print 'Number of atoms: %s' % self.natoms
                     elif iline == 2:
                         self.timestep = float(line.split()[5])
@@ -73,14 +80,14 @@ class Traj(object):
                         self.box_length = float(line.split()[0])
                         print 'Box length: %s A' % (self.box_length)
                     if (my_step % freqstep) == 0:
-                        if ( np.abs(iline-2) % (4*self.natoms + 4) ) == 0:
+                        if ( np.abs(iline-2) % ( (1+len(list_array))*self.natoms + 4) ) == 0:
                             self.times['saved'].append(float(line.split()[1]) - self.times['first'])
-                        if ( np.abs(iline-2) % (4*self.natoms + 4) ) > 3:
-                            my_line = (iline - 6 - 4*step) % 4
+                        if ( np.abs(iline-2) % ((1+len(list_array))*self.natoms + 4) ) > 3:
+                            my_line = (iline - 6 - 4*step) % (1+len(list_array))
                             if  my_line == 0:
                                 iatom += 1
                                 self.labels[iatom] = line.split()[0]
-                                for array in [self.forces, self.velocities, self.positions]:
+                                for array in list_array:
                                     array[step].append([])
                             else:
                                 for mod, array in enumerate(list_array):
@@ -92,6 +99,7 @@ class Traj(object):
                 for step in range(self.steps):
                     if len(self.positions[step]) != self.natoms:
                         print "error for step", step, len(self.positions[step])
+                        stop
                 self.positions = np.array(self.positions)
                 self.velocities = np.array(self.velocities)
                 self.forces= np.array(self.forces)
@@ -138,23 +146,25 @@ class Traj(object):
                 stop
 
     def shift_com(self):
-        com_vel = np.mean(self.velocities, axis = 0)
-        self.vel_shifted = self.velocities - com_vel
+        if self.number_config > 0:
+            com_vel = np.mean(self.velocities, axis = 0)
+            self.vel_shifted = self.velocities - com_vel
 
     def calculate_cm(self):
-        self.positions_cm = np.zeros((self.steps, self.nmols, 3 ))
-        self.velocities_cm = np.zeros((self.steps, self.nmols, 3))
-        self.forces_cm = np.zeros((self.steps, self.nmols, 3))
-        for imol in range(self.nmols):
-            mass_mol = 0.0
-            for iatom in self.molecules[imol].atoms:
-                mass_mol += self.mass.get(self.labels[iatom], 1)
-                self.positions_cm[:,imol,:] += self.mass.get(self.labels[iatom], 1) * self.positions[:,iatom,:]
-                self.velocities_cm[:, imol, :] += self.mass.get(self.labels[iatom], 1) * self.velocities[:, iatom, :]
-                self.forces_cm[:, imol, :] +=  self.forces[:, iatom, :]
-            self.positions_cm[:,imol,:] = self.positions_cm[:,imol,:] / mass_mol
-            self.velocities_cm[:,imol,:] = self.velocities_cm[:, imol, :]  / mass_mol
-        self.did_cm = True
+        if self.number_config > 0:
+            self.positions_cm = np.zeros((self.steps, self.nmols, 3 ))
+            self.velocities_cm = np.zeros((self.steps, self.nmols, 3))
+            self.forces_cm = np.zeros((self.steps, self.nmols, 3))
+            for imol in range(self.nmols):
+                mass_mol = 0.0
+                for iatom in self.molecules[imol].atoms:
+                    mass_mol += self.mass.get(self.labels[iatom], 1)
+                    self.positions_cm[:,imol,:] += self.mass.get(self.labels[iatom], 1) * self.positions[:,iatom,:]
+                    self.velocities_cm[:, imol, :] += self.mass.get(self.labels[iatom], 1) * self.velocities[:, iatom, :]
+                    self.forces_cm[:, imol, :] +=  self.forces[:, iatom, :]
+                self.positions_cm[:,imol,:] = self.positions_cm[:,imol,:] / mass_mol
+                self.velocities_cm[:,imol,:] = self.velocities_cm[:, imol, :]  / mass_mol
+            self.did_cm = True
 
 
     def calculate_spectral_density(self, length = -1, ):
