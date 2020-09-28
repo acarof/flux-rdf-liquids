@@ -1,12 +1,9 @@
        PROGRAM GDR
 ! Original program from Jean-Marc Simon
 ! To do to improve:
-               ! - create first a regtest
                !-read dl_poly: box_size, position, should know the
                !config level
-               !- proper name for output file
                !- allocate dynamically
-               !- obtain info from command line
                !- run it from python which will create automatically the
                !command line
                !- use new fortran standard
@@ -27,27 +24,19 @@
         REAL*8 RR(ntot)
        REAL*8 LBOX,VBOX,PI, LBOXS2, Lred
   
-       character*200 GDR_File, traj_file
+       character*200 GDR_File, traj_file, output_file
        
        PI=3.141592654
-       write(*,*) "HEY"
        Open(30,FILE="info_gr", STATUS="UNKNOWN")
-       read(30,*)
-       read(30,*)
        read(30,*) traj_file
-       read(30,*)
+       read(30,*) output_file
        read(30,*) ncyc
-       read(30,*)
        read(30,*) lbox
-       read(30,*) 
        read(30,*) nmol
-       read(30,*)
        read(30,*) natmol
-       read(30,*)
        do ij = 1,natmol
           read(30,*) mass(ij)
        enddo
-       read(30,*) 
        read(30,*) gdrstep
        close(30)
 
@@ -58,10 +47,8 @@
        
        ntotmax=int(rsq2/gdrstep)
        do ij=1,natmol
-          write(*,*) ij, mass(ij)
           massmol=massmol+mass(ij)
        enddo
-       write(*,*) "HOY"
 
        ! print*, massmol
        histo=0.0
@@ -71,20 +58,13 @@
        do j=1,NCYC
           read(20,*)
          !         read(20,*)
-         !write(*,*) "Start reading, cyc=", j
           if (mod(j,100).eq.0) write(*,*) "start cycle", j
           do i = 1,nmol
-             !if (mod(i,1).eq.0) then 
-             !   write(*,*) "start read molecule", i , "for cycle j =", j
-             !end if
-             !if (mod(i,100).eq.0) write(*,*) "start read molecule", i
              rx(i)=0.0
              ry(i)=0.0
              rz(i)=0.0
              do ij=1,natmol
-                !write(*,*) ij
                 READ(20,*) xr,yr,zr  !!! be careful to PBC for molecules
-                !write(*,*) xr, yr, zr
                 rx(i)= rx(i)+mass(ij)*xr
                 ry(i)= ry(i)+mass(ij)*yr
                 rz(i)= rz(i)+mass(ij)*zr
@@ -94,9 +74,6 @@
              rz(i)=rz(i)/massmol
           enddo
           do i=1,nmol-1
-             !if (mod(i,1).eq.0) then 
-             !   write(*,*) "start calc molecule", i , "for cycle j =", j
-             !end if
              rxi=rx(i)
              ryi=ry(i)
              rzi=rz(i)
@@ -146,7 +123,7 @@
           histo(i)=histo(i)/hist_id(i)
        enddo
        
-       OPEN(10,FILE="GDR_CM", STATUS="UNKNOWN")
+       OPEN(10,FILE=output_file, STATUS="UNKNOWN")
        do i=1,ntotmax
           write(10,*) rr(i)-gdrstep/2.0, histo(i), hist_id(i)
        enddo
