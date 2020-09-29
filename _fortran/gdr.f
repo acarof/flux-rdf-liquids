@@ -1,8 +1,6 @@
        PROGRAM GDR
 ! Original program from Jean-Marc Simon
 ! To do to improve:
-               !-read dl_poly: box_size, position, should know the
-               !config level
                !- run it from python which will create automatically the
                !command line
 
@@ -10,15 +8,17 @@
      
        INTEGER, PARAMETER       :: dp = kind(1.0d0) 
        CHARACTER(len=2)         :: atom
-       CHARACTER(len=200)       ::  GDR_File, traj_file, output_file
-       INTEGER                  :: nconfig, trash, ntot
-       INTEGER                  :: I,J,K,ij, natmol
+       CHARACTER(len=200)       :: GDR_File, traj_file, output_file
+       CHARACTER(len=200)       :: label, method 
+       INTEGER                  :: nconfig, trash, ntot, nlines
+       INTEGER                  :: I,J,K,ij, natmol, nsteps, frequency
        INTEGER                  :: ndist, NH,NO,NC, nmol, ncyc, ntotmax
        REAL(KIND=dp)            :: MH,MO,MC,  xr,yr,zr,Rsq2
        REAL(KIND=dp)            :: rxik, ryik, rzik, dist, dist2
        REAL(KIND=dp)            :: massmol, gdrstep
        REAL(KIND=dp)            :: dens, mass_at, rxi, ryi, rzi
        REAL(KIND=dp)            :: LBOX,VBOX,PI, LBOXS2, Lred
+       REAL(KIND=dp)            :: lboy, lboz, sum_ 
        REAL(KIND=dp),DIMENSION(:), ALLOCATABLE    ::  rx, ry, rz
        REAL(KIND=dp),DIMENSION(:), ALLOCATABLE    ::  histo, hist_id
        REAL(KIND=dp),DIMENSION(:), ALLOCATABLE    ::  mass, RR, nvol_id
@@ -27,14 +27,16 @@
        Open(30,FILE="info_gr", STATUS="UNKNOWN")
        read(30,*) traj_file
        read(30,*) output_file
-       read(30,*) ncyc
+       read(30,*) nsteps
+       read(30,*) frequency
        read(30,*) lbox
        read(30,*) nmol
        read(30,*) natmol
-       ALLOCATE(mass(natmol))
-       do ij = 1,natmol
-          read(30,*) mass(ij)
-       enddo
+       read(30,*) method
+       SELECT CASE(method)
+       CASE('label')
+               read(30,*) label
+       END SELECT
        read(30,*) gdrstep
        close(30)
  
@@ -54,40 +56,57 @@
        massmol=0.0
        
        ntotmax=int(rsq2/gdrstep)
-       do ij=1,natmol
-          massmol=massmol+mass(ij)
-       enddo
-
-       ! print*, massmol
        histo=0.0
        hist_id=0.0
+       ncyc = 0
        
        Open(20,FILE=traj_file, STATUS="UNKNOWN")
        read(20,*)
        read(20,*) nconfig, trash, trash
-       do j=1,NCYC
-          if (mod(j,100).eq.0) write(*,*) "start cycle", j
+       do j=1,nsteps
+          sum_ = 0.0
+          if (mod(j,100).eq.1) write(*,*) "start cycle", j
+          if (mod(j,frequency).eq.1) then
+          ncyc=ncyc+1
           read(20,*)  
-          read(20,*) lbox, trash, trash
+          read(20,*) lbox, lboy, lboz
           read(20,*)  
           read(20,*)  
           do i = 1,nmol
              rx(i)=0.0
              ry(i)=0.0
              rz(i)=0.0
+             massmol = 0.0
              do ij=1,natmol
-                READ(20,*) trash, trash, mass_at, trash
+                READ(20,*) atom, trash, mass_at, lboy
                 READ(20,*) xr,yr,zr  !!! be careful to PBC for molecules
                 do k=1,nconfig
                    read(20,*)  
-                enddo 
-                rx(i)= rx(i)+mass_at*xr
-                ry(i)= ry(i)+mass_at*yr
-                rz(i)= rz(i)+mass_at*zr
+                enddo
+                SELECT CASE(method)
+                CASE('label')
+                    if (atom.EQ.label) then
+                        rx(i) = xr
+                        ry(i) = yr
+                        rz(i) = zr
+                    endif
+                    massmol=1
+                CASE('COM')
+                    rx(i)= rx(i)+mass_at*xr
+                    ry(i)= ry(i)+mass_at*yr
+                    rz(i)= rz(i)+mass_at*zr
+                    massmol = massmol + mass_at
+                END SELECT
+                if (atom.EQ.'C') then
+                        rxi=xr
+                        ryi=yr
+                        rzi=zr
+                endif
              enddo
              rx(i)=rx(i)/massmol
              ry(i)=ry(i)/massmol
              rz(i)=rz(i)/massmol
+             sum_ = sum_ +  dsqrt((rx(i)-rxi)**2+(rx(i)-rxi)**2+(rx(i)-rxi)**2)
           enddo
           do i=1,nmol-1
              rxi=rx(i)
@@ -108,12 +127,20 @@
                    if (dist.LT.2) then  !! test if yes problem of distances , PBC, ...
                       print*,dist, i,k,j
                       print*, rxi, ryi, rzi
+                      print*, rxik, ryik, rzik
                       print*, rx(k), ry(k), rz(k)
+                      print*, rx(i), ry(i), rz(i)
                       stop
                    endif
                 endif
              enddo
           enddo
+          else
+                  nlines=4+(2+nconfig)*nmol*natmol
+                  do i=1,nlines
+                     read(20,*) 
+                  enddo
+          end if 
        enddo                    !! ncyc
        histo=histo/(ncyc*nmol)
       
