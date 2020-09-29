@@ -3,28 +3,25 @@
 ! To do to improve:
                !-read dl_poly: box_size, position, should know the
                !config level
-               !- allocate dynamically
                !- run it from python which will create automatically the
                !command line
-               !- use new fortran standard
 
-      
-         integer ntot, maxmol
-         parameter (ntot=100000, maxmol=100000)
-         character*2 atom
-        INTEGER I,J,K,ij
-        INTEGER  ndist
-        integer NH,NO,NC, nmol, ncyc, ntotmax, natmol
-        real*8 MH,MO,MC, mass(10), xr,yr,zr,Rsq2
-        real*8 rx(maxmol), ry(maxmol), rz(maxmol)
-        real*8 rxik, ryik, rzik, dist, dist2
-        real*8 massmol, gdrstep
-        real*8 histo(ntot),hist_id(ntot), nvol_id(ntot)
-        real*8 dens
-        REAL*8 RR(ntot)
-       REAL*8 LBOX,VBOX,PI, LBOXS2, Lred
-  
-       character*200 GDR_File, traj_file, output_file
+       IMPLICIT NONE
+     
+       INTEGER, PARAMETER       :: dp = kind(1.0d0) 
+       CHARACTER(len=2)         :: atom
+       CHARACTER(len=200)       ::  GDR_File, traj_file, output_file
+       INTEGER                  :: nconfig, trash, ntot
+       INTEGER                  :: I,J,K,ij, natmol
+       INTEGER                  :: ndist, NH,NO,NC, nmol, ncyc, ntotmax
+       REAL(KIND=dp)            :: MH,MO,MC,  xr,yr,zr,Rsq2
+       REAL(KIND=dp)            :: rxik, ryik, rzik, dist, dist2
+       REAL(KIND=dp)            :: massmol, gdrstep
+       REAL(KIND=dp)            :: dens, mass_at, rxi, ryi, rzi
+       REAL(KIND=dp)            :: LBOX,VBOX,PI, LBOXS2, Lred
+       REAL(KIND=dp),DIMENSION(:), ALLOCATABLE    ::  rx, ry, rz
+       REAL(KIND=dp),DIMENSION(:), ALLOCATABLE    ::  histo, hist_id
+       REAL(KIND=dp),DIMENSION(:), ALLOCATABLE    ::  mass, RR, nvol_id
        
        PI=3.141592654
        Open(30,FILE="info_gr", STATUS="UNKNOWN")
@@ -34,11 +31,22 @@
        read(30,*) lbox
        read(30,*) nmol
        read(30,*) natmol
+       ALLOCATE(mass(natmol))
        do ij = 1,natmol
           read(30,*) mass(ij)
        enddo
        read(30,*) gdrstep
        close(30)
+ 
+       ntot=INT(LBOX/gdrstep)
+       ALLOCATE(histo(ntot))
+       ALLOCATE(hist_id(ntot))
+       ALLOCATE(nvol_id(ntot))
+       ALLOCATE(RR(ntot))
+ 
+       ALLOCATE(rx(nmol))
+       ALLOCATE(ry(nmol))
+       ALLOCATE(rz(nmol))
 
        lboxs2=LBOX/2.0
        rsq2=lboxs2*sqrt(2.0)
@@ -55,19 +63,27 @@
        hist_id=0.0
        
        Open(20,FILE=traj_file, STATUS="UNKNOWN")
+       read(20,*)
+       read(20,*) nconfig, trash, trash
        do j=1,NCYC
-          read(20,*)
-         !         read(20,*)
           if (mod(j,100).eq.0) write(*,*) "start cycle", j
+          read(20,*)  
+          read(20,*) lbox, trash, trash
+          read(20,*)  
+          read(20,*)  
           do i = 1,nmol
              rx(i)=0.0
              ry(i)=0.0
              rz(i)=0.0
              do ij=1,natmol
+                READ(20,*) trash, trash, mass_at, trash
                 READ(20,*) xr,yr,zr  !!! be careful to PBC for molecules
-                rx(i)= rx(i)+mass(ij)*xr
-                ry(i)= ry(i)+mass(ij)*yr
-                rz(i)= rz(i)+mass(ij)*zr
+                do k=1,nconfig
+                   read(20,*)  
+                enddo 
+                rx(i)= rx(i)+mass_at*xr
+                ry(i)= ry(i)+mass_at*yr
+                rz(i)= rz(i)+mass_at*zr
              enddo
              rx(i)=rx(i)/massmol
              ry(i)=ry(i)/massmol
