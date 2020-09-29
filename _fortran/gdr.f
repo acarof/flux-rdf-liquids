@@ -8,12 +8,12 @@
      
        INTEGER, PARAMETER       :: dp = kind(1.0d0) 
        CHARACTER(len=2)         :: atom
-       CHARACTER(len=200)       :: GDR_File, traj_file, output_file
+       CHARACTER(len=200)       :: traj_file, output_file
        CHARACTER(len=200)       :: label, method 
        INTEGER                  :: nconfig, trash, ntot, nlines
        INTEGER                  :: I,J,K,ij, natmol, nsteps, frequency
-       INTEGER                  :: ndist, NH,NO,NC, nmol, ncyc, ntotmax
-       REAL(KIND=dp)            :: MH,MO,MC,  xr,yr,zr,Rsq2
+       INTEGER                  :: ndist, nmol, ncyc, ntotmax
+       REAL(KIND=dp)            :: xr,yr,zr,Rsq2
        REAL(KIND=dp)            :: rxik, ryik, rzik, dist, dist2
        REAL(KIND=dp)            :: massmol, gdrstep
        REAL(KIND=dp)            :: dens, mass_at, rxi, ryi, rzi
@@ -21,7 +21,7 @@
        REAL(KIND=dp)            :: lboy, lboz, sum_ 
        REAL(KIND=dp),DIMENSION(:), ALLOCATABLE    ::  rx, ry, rz
        REAL(KIND=dp),DIMENSION(:), ALLOCATABLE    ::  histo, hist_id
-       REAL(KIND=dp),DIMENSION(:), ALLOCATABLE    ::  mass, RR, nvol_id
+       REAL(KIND=dp),DIMENSION(:), ALLOCATABLE    ::  RR, nvol_id
        
        PI=3.141592654
        Open(30,FILE="info_gr", STATUS="UNKNOWN")
