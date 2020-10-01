@@ -24,7 +24,7 @@
        REAL(KIND=dp),DIMENSION(:), ALLOCATABLE    ::  RR, nvol_id
        
        PI=3.141592654
-       Open(30,FILE="info_gdr", STATUS="UNKNOWN")
+       Open(30,FILE="info_gdr", STATUS="old", ACTION="READ")
        read(30,*) traj_file
        read(30,*) output_file
        read(30,*) nsteps
@@ -66,7 +66,7 @@
        do j=1,nsteps
           sum_ = 0.0
           if (mod(j,100).eq.1) write(*,*) "start cycle", j
-          if (mod(j,frequency).eq.1) then
+          if (mod(j-1,frequency).eq.0) then
           ncyc=ncyc+1
           read(20,*)  
           read(20,*) lbox, lboy, lboz
