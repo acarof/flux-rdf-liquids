@@ -72,14 +72,17 @@ class Traj(object):
                             list_array = [self.positions, self.velocities]
                             print 'Only velocities'
                         print 'Number of atoms: %s' % self.natoms
+                        continue
                     elif iline == 2:
                         self.timestep = float(line.split()[5])
                         print 'Timestep : %s ps' % (self.timestep)
                         self.times['first'] = float(line.split()[1])
                         self.times['saved'] = []
+                        continue
                     elif iline == 3:
                         self.box_length.append(float(line.split()[0]))
                         print 'Initial box length: %s A' % (self.box_length[0])
+                        continue
                     if (my_step % freqstep) == 0:
                         if ( np.abs(iline-2) % ( (1+len(list_array))*self.natoms + 4) ) == 0:
                             self.times['saved'].append(float(line.split()[1]) - self.times['first'])
