@@ -111,7 +111,6 @@ class Traj(object):
                 #self.times['printed'] = printstep * np.arange(self.printed_steps)
                 #self.times['MD'] = self.timestep * np.arange(self.total_steps)
                 self.shift_com()
-                print self.box_length
                 self.unwrap()
                 self.build_molecules()
                 self.calculate_cm()
@@ -155,7 +154,7 @@ class Traj(object):
             self.vel_shifted = self.velocities - com_vel
 
     def calculate_cm(self):
-        if self.number_config > 0:
+        if self.number_config > 1:
             self.positions_cm = np.zeros((self.steps, self.nmols, 3 ))
             self.velocities_cm = np.zeros((self.steps, self.nmols, 3))
             self.forces_cm = np.zeros((self.steps, self.nmols, 3))
