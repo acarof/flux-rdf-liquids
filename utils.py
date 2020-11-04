@@ -44,6 +44,7 @@ class Traj(object):
             with open('%s/HISTORY' % self.path) as f:
                 self.labels = {}
                 self.forces = []; self.positions = []; self.velocities = []
+                self.box_length = []
                 list_array = [self.positions, self.velocities, self.forces]
                 step = -1; my_step = -1
                 for iline, line in enumerate(f):
@@ -77,11 +78,13 @@ class Traj(object):
                         self.times['first'] = float(line.split()[1])
                         self.times['saved'] = []
                     elif iline == 3:
-                        self.box_length = float(line.split()[0])
-                        print 'Box length: %s A' % (self.box_length)
+                        self.box_length.append(float(line.split()[0]))
+                        print 'Initial box length: %s A' % (self.box_length[0])
                     if (my_step % freqstep) == 0:
                         if ( np.abs(iline-2) % ( (1+len(list_array))*self.natoms + 4) ) == 0:
                             self.times['saved'].append(float(line.split()[1]) - self.times['first'])
+                        elif (np.abs(iline - 2) % ((1 + len(list_array)) * self.natoms + 4)) == 1:
+                            self.box_length.append(float(line.split()[0]))
                         if ( np.abs(iline-2) % ((1+len(list_array))*self.natoms + 4) ) > 3:
                             my_line = (iline - 6 - 4*step) % (1+len(list_array))
                             if  my_line == 0:
@@ -108,6 +111,7 @@ class Traj(object):
                 #self.times['printed'] = printstep * np.arange(self.printed_steps)
                 #self.times['MD'] = self.timestep * np.arange(self.total_steps)
                 self.shift_com()
+                print self.box_length
                 self.unwrap()
                 self.build_molecules()
                 self.calculate_cm()
@@ -138,8 +142,8 @@ class Traj(object):
         for step in range(1,self.steps):
             #print step, self.positions[step, 410, :]
             vect = self.positions[step, :, :] - self.positions[step -1, : ,: ]
-            vect = np.rint(vect/self.box_length)
-            self.positions[step, :, :] -= np.multiply(vect,  np.array([[self.box_length,]*3,]*self.natoms))
+            vect = np.rint(vect/self.box_length[step])
+            self.positions[step, :, :] -= np.multiply(vect,  np.array([[self.box_length[step],]*3,]*self.natoms))
             #print step, self.positions[step, 410, :], "after"
             if np.isnan(self.positions[step, :, :]).any():
                 print "Problem unwrap"
@@ -291,107 +295,6 @@ class Traj(object):
 
 
 
-    def determine_rdf_cm_forces(self, binwidth, kbT, pairs = [], ):
-        if not self.did_cm:
-            self.calculate_cm()
-        if len(pairs) == 0:
-            for mol in set(self.labels_mol.values()):
-                for mol2 in set(self.labels_mol.values()):
-                    pairs.append( tuple( sorted( (mol, mol2) )))
-            pairs = set(pairs)
-        start_tot = time.time()
-        self.bins['rdf_cm_forces'] = binwidth * np.array(range(int(np.sqrt(2) *self.box_length / (2 * binwidth))))
-        self.bins['rdf_cm_forces'] = binwidth * np.array(range(int(self.box_length / binwidth)))
-        self.rdf_cm_forces = {}
-        count = {}
-        for pair in pairs:
-            count[pair] = 0
-            self.rdf_cm_forces [pair] = np.zeros(len(self.bins['rdf_cm_forces']))
-        for imol in range(self.nmols):
-            if (imol % 1000) == 0:
-                start = time.time()
-            for imol2 in [i for i in range(imol + 1, self.nmols)]:
-                pair = tuple(sorted([self.molecules[imol].label, self.molecules[imol].label]))
-                vect = (self.positions_cm[:, imol2, :] - self.positions_cm[:, imol, :])
-                vect = vect - self.box_length * np.rint(vect / self.box_length)
-                dist = np.sqrt(np.sum(np.power(vect, 2), 1))
-                diff_forces = 0.5*(self.forces_cm[:,imol2, :] - self.forces_cm[:,imol,:])
-                dot = (diff_forces * vect).sum(1)
-                toadd = dot / dist**3
-                for step in range(len(dist)):
-                    n =int(dist[step] / binwidth)
-                    lim = int((np.sqrt(2) * self.box_length / 2) / binwidth)
-                    lim = int(self.box_length/ (2*binwidth))
-                    lim = int(self.box_length/binwidth)
-                    if  n < lim:
-                        count[pair] += 1
-                        for k in range(n+1):
-                            self.rdf_cm_forces[pair][k] += toadd[step]
-                        #for k in range(n,len(self.bins['rdf_forces'])):
-                        #    self.rdf_forces[pair][k] += toadd[step]
-                    else:
-                        print n, lim
-            if (imol % 1000) == 0:
-                print "For mol %s finish in:" % imol, time.time() - start
-        for pair in pairs:
-            print pair
-            print count[pair]
-            print self.count_pair_mol(pair) * self.steps / ( ( 1 + int(pair[0] == pair[1]) ))
-            eps = ( 1 + int(pair[0] == pair[1]) )* self.box_length**3 / self.count_pair_mol(pair)
-            self.rdf_cm_forces[pair] =  - eps* self.rdf_cm_forces[pair] / (4*np.pi*kbT*self.steps)
-        print "Total time is :", time.time() - start_tot
-
-    def determine_rdf_forces(self, binwidth, kbT, pairs = [], ):
-        if not self.is_read:
-            self.read_traj_dlpoly()
-        start_tot = time.time()
-        if len(pairs) == 0:
-            for atom in set(self.labels.values()):
-                for atom2 in set(self.labels.values()):
-                    pairs.append( tuple( sorted( (atom, atom2))))
-            pairs = set(pairs)
-        self.bins['rdf_forces'] = binwidth * np.array(range(int(np.sqrt(2) *self.box_length / (2 * binwidth))))
-        self.bins['rdf_forces'] = binwidth * np.array(range(int(self.box_length / binwidth)))
-        self.rdf_forces = {}
-        count = {}
-        for pair in pairs:
-            count[pair] = 0
-            self.rdf_forces [pair] = np.zeros(len(self.bins['rdf_forces']))
-        for iatom in range(self.natoms):
-            if (iatom % 1000) == 0:
-                start = time.time()
-            for iatom2 in [i for i in range(iatom + 1, self.natoms)]:
-                pair = tuple(sorted([self.labels[iatom], self.labels[iatom2]]))
-                if pair in pairs and iatom2 not in self.find_molecules[iatom].atoms:
-                    vect = (self.positions[:, iatom2, :] - self.positions[:, iatom, :])
-                    vect = vect - self.box_length * np.rint(vect / self.box_length)
-                    dist = np.sqrt(np.sum(np.power(vect, 2), 1))
-                    diff_forces = 0.5*(self.forces[:,iatom2, :] - self.forces[:,iatom,:])
-                    dot = (diff_forces * vect).sum(1)
-                    toadd = dot / dist**3
-                    for step in range(len(dist)):
-                        n =int(dist[step] / binwidth)
-                        lim = int((np.sqrt(2) * self.box_length / 2) / binwidth)
-                        lim = int(self.box_length/ (2*binwidth))
-                        lim = int(self.box_length/binwidth)
-                        if  n < lim:
-                            count[pair] += 1
-                            for k in range(n+1):
-                                self.rdf_forces[pair][k] += toadd[step]
-                            #for k in range(n,len(self.bins['rdf_forces'])):
-                            #    self.rdf_forces[pair][k] += toadd[step]
-                        else:
-                            print n, lim
-            if (iatom % 1000) == 0:
-                print "For atom %s finish in:" % iatom, time.time() - start
-        for pair in pairs:
-            print pair
-            print count[pair]
-            print self.count_pair(pair) * self.steps / ( ( 1 + int(pair[0] == pair[1]) ))
-            eps = ( 1 + int(pair[0] == pair[1]) )* self.box_length**3 / self.count_pair(pair)
-            self.rdf_forces[pair] =  - eps* self.rdf_forces[pair] / (4*np.pi*kbT*self.steps)
-        print "Total time is :", time.time() - start_tot
-
 
     def determine_rdf(self, binwidth,  pairs = [], wrap = False):
         if not self.is_read:
@@ -402,7 +305,7 @@ class Traj(object):
                     pairs.append( tuple( sorted( (atom, atom2))))
             pairs = set(pairs)
         start_tot = time.time()
-        self.bins['rdf'] = binwidth * np.array(range(int(np.sqrt(2) *self.box_length / (2 * binwidth))))
+        self.bins['rdf'] = binwidth * np.array(range(int(np.sqrt(2) *self.max(box_length) / (2 * binwidth))))
         rdfs = {}
         for pair in pairs:
             rdfs[pair] = np.zeros(len(self.bins['rdf']))
